@@ -59,6 +59,8 @@ vg_thread_loop(void *arg)
 	const int ptarraysize = 256;
 	EC_POINT *ppnt[ptarraysize];
 	EC_POINT *pbatchinc;
+	BIGNUM start;
+	BIGNUM *res;
 
 	vg_test_func_t test_func = vcp->vc_test;
 	vg_exec_context_t ctx;
@@ -358,8 +360,6 @@ main(int argc, char **argv)
 	int pattfpi[MAX_FILE];
 	int npattfp = 0;
 	int pattstdin = 0;
-    BIGNUM start;
-	BIGNUM *res;
 
 	int i;
 
