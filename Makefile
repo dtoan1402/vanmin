@@ -1,7 +1,7 @@
 LIBS=-lpcre -lcrypto -lm -lpthread
 CFLAGS=-ggdb -O3 -Wall
-OBJS=vanmin.o oclvanmin.o oclvanityminer.o oclengine.o keyconv.o pattern.o util.o
-PROGS=vanmin keyconv oclvanmin oclvanityminer
+OBJS=vanitygen.o oclvanitygen.o oclvanityminer.o oclengine.o keyconv.o pattern.o util.o
+PROGS=vanitygen keyconv oclvanitygen oclvanityminer
 
 PLATFORM=$(shell uname -s)
 ifeq ($(PLATFORM),Darwin)
@@ -11,14 +11,14 @@ OPENCL_LIBS=-lOpenCL
 endif
 
 
-most: vanmin keyconv
+most: vanitygen keyconv
 
 all: $(PROGS)
 
-vanmin: vanmin.o pattern.o util.o
+vanitygen: vanitygen.o pattern.o util.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
 
-oclvanmin: oclvanmin.o oclengine.o pattern.o util.o
+oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS)
 
 oclvanityminer: oclvanityminer.o oclengine.o pattern.o util.o
