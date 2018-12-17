@@ -28,7 +28,7 @@ most: vanitygen keyconv
 
 all: $(PROGS)
 
-vanitygen: vanitygen.o pattern.o util.o  SHA256string
+vanitygen: vanitygen.o pattern.o util.o  SHA256string.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
 
 oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o 
