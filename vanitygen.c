@@ -5,7 +5,7 @@
  * Vanitygen is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * any later version. 
+ * any later version.
  *
  * Vanitygen is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -31,7 +31,6 @@
 
 #include "pattern.h"
 #include "util.h"
-#include "SHA256string.h"
 
 
 const char *version = VANITYGEN_VERSION;
@@ -54,12 +53,12 @@ vg_thread_loop(void *arg)
 	const BN_ULONG rekey_max = 10000000;
 	BN_ULONG npoints, rekey_at, nbatch;
 
-	vg_context_t *vcp = (vg_context_t *) arg;
+	vg_context_t *vcp = (vg_context_t *)arg;
 	EC_KEY *pkey = NULL;
 	const EC_GROUP *pgroup;
 	const EC_POINT *pgen;
 	const int ptarraysize = 256;
-	EC_POINT *ppnt[ptarraysize];
+	EC_POINT *ppnt[256];
 	EC_POINT *pbatchinc;
 	BIGNUM start;
 	BIGNUM *res;
@@ -95,7 +94,7 @@ vg_thread_loop(void *arg)
 
 	BN_set_word(&vxcp->vxc_bntmp, ptarraysize);
 	EC_POINT_mul(pgroup, pbatchinc, &vxcp->vxc_bntmp, NULL, NULL,
-		     vxcp->vxc_bnctx);
+		vxcp->vxc_bnctx);
 	EC_POINT_make_affine(pgroup, pbatchinc, vxcp->vxc_bnctx);
 
 	npoints = 0;
@@ -108,15 +107,16 @@ vg_thread_loop(void *arg)
 	gettimeofday(&tvstart, NULL);
 
 	if (vcp->vc_format == VCF_SCRIPT) {
-		hash_buf[ 0] = 0x51;  // OP_1
-		hash_buf[ 1] = 0x41;  // pubkey length
+		hash_buf[0] = 0x51;  // OP_1
+		hash_buf[1] = 0x41;  // pubkey length
 		// gap for pubkey
 		hash_buf[67] = 0x51;  // OP_1
 		hash_buf[68] = 0xae;  // OP_CHECKMULTISIG
 		eckey_buf = hash_buf + 2;
 		hash_len = 69;
 
-	} else {
+	}
+	else {
 		eckey_buf = hash_buf;
 		hash_len = 65;
 	}
@@ -134,10 +134,10 @@ vg_thread_loop(void *arg)
 
 			/* Determine rekey interval */
 			EC_GROUP_get_order(pgroup, &vxcp->vxc_bntmp,
-					   vxcp->vxc_bnctx);
+				vxcp->vxc_bnctx);
 			BN_sub(&vxcp->vxc_bntmp2,
-			       &vxcp->vxc_bntmp,
-			       EC_KEY_get0_private_key(pkey));
+				&vxcp->vxc_bntmp,
+				EC_KEY_get0_private_key(pkey));
 			rekey_at = BN_get_word(&vxcp->vxc_bntmp2);
 			if ((rekey_at == BN_MASK2) || (rekey_at > rekey_max))
 				rekey_at = rekey_max;
@@ -151,21 +151,22 @@ vg_thread_loop(void *arg)
 
 			if (vcp->vc_pubkey_base)
 				EC_POINT_add(pgroup,
-					     ppnt[0],
-					     ppnt[0],
-					     vcp->vc_pubkey_base,
-					     vxcp->vxc_bnctx);
+					ppnt[0],
+					ppnt[0],
+					vcp->vc_pubkey_base,
+					vxcp->vxc_bnctx);
 
 			for (nbatch = 1;
-			     (nbatch < ptarraysize) && (npoints < rekey_at);
-			     nbatch++, npoints++) {
+				(nbatch < ptarraysize) && (npoints < rekey_at);
+				nbatch++, npoints++) {
 				EC_POINT_add(pgroup,
-					     ppnt[nbatch],
-					     ppnt[nbatch-1],
-					     pgen, vxcp->vxc_bnctx);
+					ppnt[nbatch],
+					ppnt[nbatch - 1],
+					pgen, vxcp->vxc_bnctx);
 			}
 
-		} else {
+		}
+		else {
 			/*
 			 * Common case
 			 *
@@ -176,13 +177,13 @@ vg_thread_loop(void *arg)
 			 */
 			assert(nbatch == ptarraysize);
 			for (nbatch = 0;
-			     (nbatch < ptarraysize) && (npoints < rekey_at);
-			     nbatch++, npoints++) {
+				(nbatch < ptarraysize) && (npoints < rekey_at);
+				nbatch++, npoints++) {
 				EC_POINT_add(pgroup,
-					     ppnt[nbatch],
-					     ppnt[nbatch],
-					     pbatchinc,
-					     vxcp->vxc_bnctx);
+					ppnt[nbatch],
+					ppnt[nbatch],
+					pbatchinc,
+					vxcp->vxc_bnctx);
 			}
 		}
 
@@ -202,10 +203,10 @@ vg_thread_loop(void *arg)
 		for (i = 0; i < nbatch; i++, vxcp->vxc_delta++) {
 			/* Hash the public key */
 			len = EC_POINT_point2oct(pgroup, ppnt[i],
-						 POINT_CONVERSION_UNCOMPRESSED,
-						 eckey_buf,
-						 65,
-						 vxcp->vxc_bnctx);
+				POINT_CONVERSION_UNCOMPRESSED,
+				eckey_buf,
+				65,
+				vxcp->vxc_bnctx);
 			assert(len == 65);
 
 			SHA256(hash_buf, hash_len, hash1);
@@ -302,34 +303,34 @@ void
 usage(const char *name)
 {
 	fprintf(stderr,
-"Vanitygen %s (" OPENSSL_VERSION_TEXT ")\n"
-"Usage: %s [-vqrikNT] [-t <threads>] [-f <filename>|-] [<pattern>...]\n"
-"Generates a bitcoin receiving address matching <pattern>, and outputs the\n"
-"address and associated private key.  The private key may be stored in a safe\n"
-"location or imported into a bitcoin client to spend any balance received on\n"
-"the address.\n"
-"By default, <pattern> is interpreted as an exact prefix.\n"
-"\n"
-"Options:\n"
-"-v            Verbose output\n"
-"-q            Quiet output\n"
-"-r            Use regular expression match instead of prefix\n"
-"              (Feasibility of expression is not checked)\n"
-"-i            Case-insensitive prefix search\n"
-"-k            Keep pattern and continue search after finding a match\n"
-"-N            Generate namecoin address\n"
-"-T            Generate bitcoin testnet address\n"
-"-X <version>  Generate address with the given version\n"
-"-F <format>   Generate address with the given format (pubkey or script)\n"
-"-P <pubkey>   Specify base public key for piecewise key generation\n"
-"-e            Encrypt private keys, prompt for password\n"
-"-E <password> Encrypt private keys with <password> (UNSAFE)\n"
-"-t <threads>  Set number of worker threads (Default: number of CPUs)\n"
-"-f <file>     File containing list of patterns, one per line\n"
-"              (Use \"-\" as the file name for stdin)\n"
-"-o <file>     Write pattern matches to <file>\n"
-"-s <file>     Seed random number generator from <file>\n",
-version, name);
+		"Vanitygen %s (" OPENSSL_VERSION_TEXT ")\n"
+		"Usage: %s [-vqrikNT] [-t <threads>] [-f <filename>|-] [<pattern>...]\n"
+		"Generates a bitcoin receiving address matching <pattern>, and outputs the\n"
+		"address and associated private key.  The private key may be stored in a safe\n"
+		"location or imported into a bitcoin client to spend any balance received on\n"
+		"the address.\n"
+		"By default, <pattern> is interpreted as an exact prefix.\n"
+		"\n"
+		"Options:\n"
+		"-v            Verbose output\n"
+		"-q            Quiet output\n"
+		"-r            Use regular expression match instead of prefix\n"
+		"              (Feasibility of expression is not checked)\n"
+		"-i            Case-insensitive prefix search\n"
+		"-k            Keep pattern and continue search after finding a match\n"
+		"-N            Generate namecoin address\n"
+		"-T            Generate bitcoin testnet address\n"
+		"-X <version>  Generate address with the given version\n"
+		"-F <format>   Generate address with the given format (pubkey or script)\n"
+		"-P <pubkey>   Specify base public key for piecewise key generation\n"
+		"-e            Encrypt private keys, prompt for password\n"
+		"-E <password> Encrypt private keys with <password> (UNSAFE)\n"
+		"-t <threads>  Set number of worker threads (Default: number of CPUs)\n"
+		"-f <file>     File containing list of patterns, one per line\n"
+		"              (Use \"-\" as the file name for stdin)\n"
+		"-o <file>     Write pattern matches to <file>\n"
+		"-s <file>     Seed random number generator from <file>\n",
+		version, name);
 }
 
 #define MAX_FILE 4
@@ -401,11 +402,11 @@ main(int argc, char **argv)
 			if (!strcmp(optarg, "script"))
 				format = VCF_SCRIPT;
 			else
-			if (strcmp(optarg, "pubkey")) {
-				fprintf(stderr,
-					"Invalid format '%s'\n", optarg);
-				return 1;
-			}
+				if (strcmp(optarg, "pubkey")) {
+					fprintf(stderr,
+						"Invalid format '%s'\n", optarg);
+					return 1;
+				}
 			break;
 		case 'P': {
 			if (pubkey_base != NULL) {
@@ -425,7 +426,7 @@ main(int argc, char **argv)
 			}
 			break;
 		}
-			
+
 		case 'e':
 			prompt_password = 1;
 			break;
@@ -453,7 +454,8 @@ main(int argc, char **argv)
 					return 1;
 				}
 				fp = stdin;
-			} else {
+			}
+			else {
 				fp = fopen(optarg, "r");
 				if (!fp) {
 					fprintf(stderr,
@@ -518,9 +520,9 @@ main(int argc, char **argv)
 		opt = -1;
 #if !defined(_WIN32)
 		{	struct stat st;
-			if (!stat(seedfile, &st) &&
-			    (st.st_mode & (S_IFBLK|S_IFCHR))) {
-				opt = 32;
+		if (!stat(seedfile, &st) &&
+			(st.st_mode & (S_IFBLK | S_IFCHR))) {
+			opt = 32;
 		} }
 #endif
 		opt = RAND_load_file(seedfile, opt);
@@ -537,9 +539,10 @@ main(int argc, char **argv)
 	if (regex) {
 		vcp = vg_regex_context_new(addrtype, privtype);
 
-	} else {
+	}
+	else {
 		vcp = vg_prefix_context_new(addrtype, privtype,
-					    caseinsensitive);
+			caseinsensitive);
 	}
 
 	vcp->vc_verbose = verbose;
@@ -561,9 +564,9 @@ main(int argc, char **argv)
 		npatterns = argc - optind;
 
 		if (!vg_context_add_patterns(vcp,
-					     (const char ** const) patterns,
-					     npatterns))
-		return 1;
+			(const char ** const)patterns,
+			npatterns))
+			return 1;
 	}
 
 	for (i = 0; i < npattfp; i++) {
@@ -579,9 +582,9 @@ main(int argc, char **argv)
 			vg_prefix_context_set_case_insensitive(vcp, pattfpi[i]);
 
 		if (!vg_context_add_patterns(vcp,
-					     (const char ** const) patterns,
-					     npatterns))
-		return 1;
+			(const char ** const)patterns,
+			npatterns))
+			return 1;
 	}
 
 	if (!vcp->vc_npatterns) {

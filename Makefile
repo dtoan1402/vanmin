@@ -8,9 +8,9 @@ CFLAGS=-ggdb -O3 -Wall
 # INCPATHS=-I$(shell brew --prefix)/include -I$(shell brew --prefix openssl)/include
 # LIBPATHS=-L$(shell brew --prefix)/lib -L$(shell brew --prefix openssl)/lib
 # CFLAGS=-ggdb -O3 -Wall -Qunused-arguments $(INCPATHS) $(LIBPATHS)
+SRCS = vanitygen.c oclvanitygen.c oclvanityminer.c oclengine.c keyconv.c pattern.c util.c SHA256string.cpp
 OBJS=vanitygen.o oclvanitygen.o oclvanityminer.o oclengine.o keyconv.o pattern.o util.o SHA256string.o
 PROGS=vanitygen keyconv oclvanitygen oclvanityminer
-
 PLATFORM=$(shell uname -s)
 ifeq ($(PLATFORM),Darwin)
 	OPENCL_LIBS=-framework OpenCL

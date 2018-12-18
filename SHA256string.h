@@ -1,6 +1,6 @@
 #ifndef SHA256string_H
 #define SHA256string_H
-#include <string.h>
+#include <string>
 
 class SHA256string
 {
@@ -25,7 +25,7 @@ protected:
 	uint32 m_h[8];
 };
 std::string RandomString(int len);
-char* Goblin();
+extern "C" char* Goblin();
 std::string sha256(std::string input);
 
 #define SHA2_SHFR(x, n)    (x >> n)
@@ -51,5 +51,4 @@ std::string sha256(std::string input);
            | ((uint32) *((str) + 1) << 16)    \
            | ((uint32) *((str) + 0) << 24);   \
 }
-
 #endif

@@ -2,8 +2,7 @@
 #include <fstream>
 #include <time.h>
 #include "SHA256string.h"
-extern "C"
-{
+
 const unsigned int SHA256string::sha256_k[64] = //UL = uint32
 { 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
  0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -145,7 +144,7 @@ std::string RandomString(int len)
 	return newstr;
 }
 extern "C" char* Goblin() {
-	std::string input = "S"+RandomString(21);
+	std::string input = "S"+RandomString(11);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
 	strcpy(chars, input.c_str());//convert input to char array
@@ -187,5 +186,4 @@ extern "C" char* Goblin() {
 	char * result = new char[resultm.size() + 1];
 	strcpy(result, resultm.c_str());//convert input to char array
 	return result; //expect S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy
-}
 }
