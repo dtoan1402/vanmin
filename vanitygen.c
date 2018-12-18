@@ -31,7 +31,9 @@
 
 #include "pattern.h"
 #include "util.h"
+extern "C" {
 #include "SHA256string.h"
+}
 
 
 const char *version = VANITYGEN_VERSION;
