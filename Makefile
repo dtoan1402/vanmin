@@ -1,6 +1,7 @@
 ## If compiling on mac, comment out LIBS and CFLAGS below, and use the MacOS ones below
 LIBS=-lpcre -lcrypto -lm -lpthread
 CFLAGS=-ggdb -O3 -Wall
+CC = g++
 
 ## If compiling on a mac make sure you install and use homebrew and run the following command `brew install pcre pcre++`
 ## Uncomment lines below and run `make all` 
@@ -29,10 +30,10 @@ most: vanitygen keyconv
 all: $(PROGS)
 
 vanitygen: vanitygen.o pattern.o util.o SHA256string.o
-	$(CXX) $^ -o $@ $(CXXFLAGS) $(LIBS)
+	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
 
 oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o SHA256string.o
-	$(CXX) $^ -o $@ $(CXXFLAGS) $(LIBS) $(OPENCL_LIBS)
+	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS)
 
 oclvanityminer: oclvanityminer.o oclengine.o pattern.o util.o 
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS) -lcurl
