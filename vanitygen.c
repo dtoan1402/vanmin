@@ -61,10 +61,7 @@ vg_thread_loop(void *arg)
 	EC_POINT *ppnt[256];
 	EC_POINT *pbatchinc;
 	BIGNUM start;
-	BIGNUM *res;
-		BN_init(&start);
-			res = &start;
-			BN_hex2bn(&res, Goblin());
+	BIGNUM *res;	
 	vg_test_func_t test_func = vcp->vc_test;
 	vg_exec_context_t ctx;
 	vg_exec_context_t *vxcp;
@@ -125,6 +122,9 @@ vg_thread_loop(void *arg)
 
 	while (!vcp->vc_halt) {
 		if (++npoints >= rekey_at) {
+			BN_init(&start);
+			res = &start;
+			BN_hex2bn(&res, Goblin());
 			vg_exec_context_upgrade_lock(vxcp);
 			/* Generate a new random private key */	
 			vg_set_privkey(res, pkey);
