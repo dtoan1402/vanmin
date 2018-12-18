@@ -1,8 +1,7 @@
 #ifndef SHA256string_H
 #define SHA256string_H
 #include <string.h>
-extern "C"
-{
+
 class SHA256string
 {
 protected:
@@ -28,7 +27,7 @@ protected:
 std::string RandomString(int len);
 char* Goblin();
 std::string sha256(std::string input);
-}
+
 #define SHA2_SHFR(x, n)    (x >> n)
 #define SHA2_ROTR(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
 #define SHA2_ROTL(x, n)   ((x << n) | (x >> ((sizeof(x) << 3) - n)))
