@@ -133,7 +133,7 @@ std::string sha256(std::string input)
 }
 std::string RandomString(int len)
 {
-	srand(time(NULL));
+	srand(time(0));
 	std::string str = "z23BmPnitopqrsYZab4gF56789yQRSTUVWXjkAcdefhKLMNuvwxCDEGHJ";
 	std::string newstr;
 	int pos;
