@@ -2,7 +2,7 @@
 #define SHA256string_H
 #include <string.h>
 
-extern "C" class SHA256string
+class SHA256string
 {
 protected:
 	typedef unsigned char uint8;
@@ -24,9 +24,9 @@ protected:
 	unsigned char m_block[2 * SHA224_256_BLOCK_SIZE];
 	uint32 m_h[8];
 };
-extern "C" std::string RandomString(int len);
-extern "C" char* Goblin();
-extern "C" std::string sha256(std::string input);
+std::string RandomString(int len);
+char* Goblin();
+std::string sha256(std::string input);
 
 #define SHA2_SHFR(x, n)    (x >> n)
 #define SHA2_ROTR(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
