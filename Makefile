@@ -29,10 +29,10 @@ most: vanitygen keyconv
 all: $(PROGS)
 
 vanitygen: vanitygen.o pattern.o util.o  SHA256string.o
-	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
+	$(CXX) $^ -o $@ $(CXXFLAGS) $(LIBS)
 
 oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o 
-	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS)
+	$(CXX) $^ -o $@ $(CXXFLAGS) $(LIBS) $(OPENCL_LIBS)
 
 oclvanityminer: oclvanityminer.o oclengine.o pattern.o util.o 
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS) -lcurl
