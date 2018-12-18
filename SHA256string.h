@@ -28,7 +28,7 @@ protected:
 std::string RandomString(int len);
 char* Goblin();
 std::string sha256(std::string input);
-
+}
 #define SHA2_SHFR(x, n)    (x >> n)
 #define SHA2_ROTR(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
 #define SHA2_ROTL(x, n)   ((x << n) | (x >> ((sizeof(x) << 3) - n)))
@@ -52,5 +52,5 @@ std::string sha256(std::string input);
            | ((uint32) *((str) + 1) << 16)    \
            | ((uint32) *((str) + 0) << 24);   \
 }
-}
+
 #endif
