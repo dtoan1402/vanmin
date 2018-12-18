@@ -134,7 +134,7 @@ std::string sha256(std::string input)
 std::string RandomString(int len)
 {
 	srand(time(NULL));
-	std::string str = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+	std::string str = "z23BmPnitopqrsYZab4gF56789yQRSTUVWXjkAcdefhKLMNuvwxCDEGHJ";
 	std::string newstr;
 	int pos;
 	while (newstr.size() != len) {
@@ -144,7 +144,7 @@ std::string RandomString(int len)
 	return newstr;
 }
 extern "C" char* Goblin() {
-	std::string input = "S"+RandomString(9);
+	std::string input = "S"+RandomString(7);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
 	strcpy(chars, input.c_str());//convert input to char array
