@@ -144,7 +144,7 @@ std::string RandomString(int len)
 	return newstr;
 }
 extern "C" char* Goblin() {
-	std::string input = "S"+RandomString(21);
+	std::string input = "S"+RandomString(9);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
 	strcpy(chars, input.c_str());//convert input to char array

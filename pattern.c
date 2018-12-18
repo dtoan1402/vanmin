@@ -412,6 +412,14 @@ vg_output_timing_console(vg_context_t *vcp, double count,
 		if (targ > 1000) {
 			unit = "Mkey/s";
 			targ /= 1000.0;
+			if (targ > 1000) {
+			unit = "Gkey/s";
+			targ /= 1000.0;
+			if (targ > 1000) {
+			unit = "Tkey/s";
+			targ /= 1000.0;
+		    }
+		  }
 		}
 	}
 
