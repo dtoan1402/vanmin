@@ -1,7 +1,8 @@
 #ifndef SHA256string_H
 #define SHA256string_H
 #include <string.h>
-
+extern "C"
+{
 class SHA256string
 {
 protected:
@@ -50,5 +51,6 @@ std::string sha256(std::string input);
            | ((uint32) *((str) + 2) <<  8)    \
            | ((uint32) *((str) + 1) << 16)    \
            | ((uint32) *((str) + 0) << 24);   \
+}
 }
 #endif
