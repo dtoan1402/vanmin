@@ -1,6 +1,8 @@
 #ifndef SHA256string_H
 #define SHA256string_H
 #include <string>
+#include <random>
+#include <algorithm>
 
 class SHA256string
 {
