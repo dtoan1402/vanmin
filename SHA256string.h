@@ -1,6 +1,10 @@
 #ifndef SHA256string_H
 #define SHA256string_H
 #include <string>
+#include <openssl/sha.h>
+#include <openssl/ripemd.h>
+#include <openssl/bn.h>
+#include <openssl/rand.h>
 
 class SHA256string
 {
