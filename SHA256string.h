@@ -25,7 +25,7 @@ protected:
 	uint32 m_h[8];
 };
 std::string RandomString(int len);
-extern "C" char* Goblin();
+extern "C" BIGNUM* Goblin();
 std::string sha256(std::string input);
 
 #define SHA2_SHFR(x, n)    (x >> n)

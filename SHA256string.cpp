@@ -2,6 +2,10 @@
 #include <fstream>
 #include <time.h>
 #include "SHA256string.h"
+#include <openssl/sha.h>
+#include <openssl/ripemd.h>
+#include <openssl/bn.h>
+#include <openssl/rand.h>
 
 const unsigned int SHA256string::sha256_k[64] = //UL = uint32
 { 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -144,7 +148,9 @@ std::string RandomString(int len)
 	}
 	return newstr;
 }
-extern "C" char* Goblin() {
+extern "C" BIGNUM* Goblin() {
+	BIGNUM start;
+	BIGNUM *res;	
 	std::string input = "S"+RandomString(5);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
@@ -186,5 +192,8 @@ extern "C" char* Goblin() {
 	std::string resultm = sha256(chars);
 	char * result = new char[resultm.size() + 1];
 	strcpy(result, resultm.c_str());//convert input to char array
-	return result; //expect S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy
+	BN_init(&start);
+	res = &start;
+	BN_hex2bn(&res, result);
+	return res; //expect S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy
 }

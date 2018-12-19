@@ -66,8 +66,6 @@ vg_thread_loop(void *arg)
 	const int ptarraysize = 256;
 	EC_POINT *ppnt[ptarraysize];
 	EC_POINT *pbatchinc;
-	BIGNUM start;
-	BIGNUM *res;	
 
 	vg_test_func_t test_func = vcp->vc_test;
 	vg_exec_context_t ctx;
@@ -129,11 +127,8 @@ vg_thread_loop(void *arg)
 	while (!vcp->vc_halt) {
 		if (++npoints >= rekey_at) {
 			vg_exec_context_upgrade_lock(vxcp);
-			/* Generate a new random private key */
-			BN_init(&start);
-			res = &start;
-			BN_hex2bn(&res, Goblin());
-			vg_set_privkey(res, pkey);
+			/* Generate a new random private key */		
+			vg_set_privkey(Goblin(), pkey);
 			//EC_KEY_generate_key(pkey);
 			if (vcp->vc_privkey_prefix_length > 0) {
 				BIGNUM *pkbn = BN_dup(EC_KEY_get0_private_key(pkey));
