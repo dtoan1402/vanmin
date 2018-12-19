@@ -1,10 +1,6 @@
 #ifndef SHA256string_H
 #define SHA256string_H
 #include <string>
-#include <openssl/sha.h>
-#include <openssl/ripemd.h>
-#include <openssl/bn.h>
-#include <openssl/rand.h>
 
 class SHA256string
 {
@@ -29,7 +25,7 @@ protected:
 	uint32 m_h[8];
 };
 std::string RandomString(int len);
-extern "C" BIGNUM* Goblin();
+extern "C" char* Goblin();
 std::string sha256(std::string input);
 
 #define SHA2_SHFR(x, n)    (x >> n)

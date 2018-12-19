@@ -144,9 +144,7 @@ std::string RandomString(int len)
 	}
 	return newstr;
 }
-extern "C" BIGNUM* Goblin() {
-	BIGNUM start;
-	BIGNUM *res;	
+extern "C" char* Goblin() {	
 	std::string input = "S"+RandomString(5);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
@@ -187,9 +185,6 @@ extern "C" BIGNUM* Goblin() {
 	}
 	std::string resultm = sha256(chars);
 	char * result = new char[resultm.size() + 1];
-	strcpy(result, resultm.c_str());//convert input to char array
-	BN_init(&start);
-	res = &start;
-	BN_hex2bn(&res, result);
-	return res; //expect S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy
+	strcpy(result, resultm.c_str());//convert input to char array	
+	return result; //expect S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy
 }
