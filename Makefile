@@ -5,7 +5,7 @@ CC = g++
 
 ## If compiling on a mac make sure you install and use homebrew and run the following command `brew install pcre pcre++`
 ## Uncomment lines below and run `make all` 
-# LIBS= -lpcre -lcrypto -lm -lpthread
+# LIBS= -lpcre -lcrypto -lm -lpthread//
 # INCPATHS=-I$(shell brew --prefix)/include -I$(shell brew --prefix openssl)/include
 # LIBPATHS=-L$(shell brew --prefix)/lib -L$(shell brew --prefix openssl)/lib
 # CFLAGS=-ggdb -O3 -Wall -Qunused-arguments $(INCPATHS) $(LIBPATHS)
