@@ -35,7 +35,7 @@
 #include <unistd.h>
 #endif
 
-#define VANITYGEN_VERSION "0.21"
+#define VANITYGEN_VERSION "PLUS v1.53"
 
 typedef struct _vg_context_s vg_context_t;
 
@@ -51,10 +51,10 @@ struct _vg_exec_context_s {
 	EC_KEY				*vxc_key;
 	int				vxc_delta;
 	unsigned char			vxc_binres[28];
-	BIGNUM				vxc_bntarg;
-	BIGNUM				vxc_bnbase;
-	BIGNUM				vxc_bntmp;
-	BIGNUM				vxc_bntmp2;
+	BIGNUM				*vxc_bntarg;
+	BIGNUM				*vxc_bnbase;
+	BIGNUM				*vxc_bntmp;
+	BIGNUM				*vxc_bntmp2;
 
 	vg_exec_context_threadfunc_t	vxc_threadfunc;
 	pthread_t			vxc_pthread;
@@ -88,6 +88,7 @@ enum vg_format {
 
 /* Application-level context, incl. parameters and global pattern store */
 struct _vg_context_s {
+        int			vc_compressed;
 	int			vc_addrtype;
 	int			vc_privtype;
 	unsigned long		vc_npatterns;
@@ -98,10 +99,15 @@ struct _vg_context_s {
 	const char		*vc_result_file;
 	const char		*vc_key_protect_pass;
 	int			vc_remove_on_match;
+	int        		vc_numpairs;
+	int			vc_only_one;
+	int        		vc_csv;
 	int			vc_verbose;
 	enum vg_format		vc_format;
 	int			vc_pubkeytype;
 	EC_POINT		*vc_pubkey_base;
+	char			vc_privkey_prefix[32];
+	int			vc_privkey_prefix_length;
 	int			vc_halt;
 
 	vg_exec_context_t	*vc_threads;

@@ -38,6 +38,7 @@
 
 #include "pattern.h"
 #include "util.h"
+#include "sph_groestl.h"
 
 const char *vg_b58_alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -95,37 +96,57 @@ dumpbn(const BIGNUM *bn)
  * Key format encode/decode
  */
 
+
+
 void
 vg_b58_encode_check(void *buf, size_t len, char *result)
 {
 	unsigned char hash1[32];
 	unsigned char hash2[32];
+	unsigned char groestlhash1[64];
+	unsigned char groestlhash2[64];
 
 	int d, p;
 
 	BN_CTX *bnctx;
 	BIGNUM *bn, *bndiv, *bntmp;
-	BIGNUM bna, bnb, bnbase, bnrem;
+	BIGNUM *bna, *bnb, *bnbase, *bnrem;
 	unsigned char *binres;
 	int brlen, zpfx;
 
 	bnctx = BN_CTX_new();
-	BN_init(&bna);
-	BN_init(&bnb);
-	BN_init(&bnbase);
-	BN_init(&bnrem);
-	BN_set_word(&bnbase, 58);
+	bna = BN_new();
+	bnb = BN_new();
+	bnbase = BN_new();
+	bnrem = BN_new();
+	BN_set_word(bnbase, 58);
 
-	bn = &bna;
-	bndiv = &bnb;
+	bn = bna;
+	bndiv = bnb;
 
 	brlen = (2 * len) + 4;
 	binres = (unsigned char*) malloc(brlen);
 	memcpy(binres, buf, len);
 
-	SHA256(binres, len, hash1);
-	SHA256(hash1, sizeof(hash1), hash2);
-	memcpy(&binres[len], hash2, 4);
+	if(!GRSFlag)
+	{
+		SHA256(binres, len, hash1);
+		SHA256(hash1, sizeof(hash1), hash2);
+		memcpy(&binres[len], hash2, 4);
+	}
+	else
+	{
+		sph_groestl512_context ctx;
+		
+		sph_groestl512_init(&ctx);
+		sph_groestl512(&ctx, binres, len);
+		sph_groestl512_close(&ctx, groestlhash1);
+		
+		sph_groestl512_init(&ctx);
+		sph_groestl512(&ctx, groestlhash1, sizeof(groestlhash1));
+		sph_groestl512_close(&ctx, groestlhash2);
+		memcpy(&binres[len], groestlhash2, 4);
+	}
 
 	BN_bin2bn(binres, len + 4, bn);
 
@@ -133,11 +154,11 @@ vg_b58_encode_check(void *buf, size_t len, char *result)
 
 	p = brlen;
 	while (!BN_is_zero(bn)) {
-		BN_div(bndiv, &bnrem, bn, &bnbase, bnctx);
+		BN_div(bndiv, bnrem, bn, bnbase, bnctx);
 		bntmp = bn;
 		bn = bndiv;
 		bndiv = bntmp;
-		d = BN_get_word(&bnrem);
+		d = BN_get_word(bnrem);
 		binres[--p] = vg_b58_alphabet[d];
 	}
 
@@ -149,10 +170,10 @@ vg_b58_encode_check(void *buf, size_t len, char *result)
 	result[brlen - p] = '\0';
 
 	free(binres);
-	BN_clear_free(&bna);
-	BN_clear_free(&bnb);
-	BN_clear_free(&bnbase);
-	BN_clear_free(&bnrem);
+	BN_clear_free(bna);
+	BN_clear_free(bnb);
+	BN_clear_free(bnbase);
+	BN_clear_free(bnrem);
 	BN_CTX_free(bnctx);
 }
 
@@ -164,16 +185,18 @@ vg_b58_decode_check(const char *input, void *buf, size_t len)
 {
 	int i, l, c;
 	unsigned char *xbuf = NULL;
-	BIGNUM bn, bnw, bnbase;
+	BIGNUM *bn, *bnw, *bnbase;
 	BN_CTX *bnctx;
 	unsigned char hash1[32], hash2[32];
+	unsigned char groestlhash1[64];
+	unsigned char groestlhash2[64];
 	int zpfx;
 	int res = 0;
 
-	BN_init(&bn);
-	BN_init(&bnw);
-	BN_init(&bnbase);
-	BN_set_word(&bnbase, 58);
+	bn = BN_new();
+	bnw = BN_new();
+	bnbase = BN_new();
+	BN_set_word(bnbase, 58);
 	bnctx = BN_CTX_new();
 
 	/* Build a bignum from the encoded value */
@@ -184,10 +207,10 @@ vg_b58_decode_check(const char *input, void *buf, size_t len)
 		c = vg_b58_reverse_map[(int)input[i]];
 		if (c < 0)
 			goto out;
-		BN_clear(&bnw);
-		BN_set_word(&bnw, c);
-		BN_mul(&bn, &bn, &bnbase, bnctx);
-		BN_add(&bn, &bn, &bnw);
+		BN_clear(bnw);
+		BN_set_word(bnw, c);
+		BN_mul(bn, bn, bnbase, bnctx);
+		BN_add(bn, bn, bnw);
 	}
 
 	/* Copy the bignum to a byte buffer */
@@ -198,7 +221,7 @@ vg_b58_decode_check(const char *input, void *buf, size_t len)
 			break;
 		zpfx++;
 	}
-	c = BN_num_bytes(&bn);
+	c = BN_num_bytes(bn);
 	l = zpfx + c;
 	if (l < 5)
 		goto out;
@@ -208,14 +231,33 @@ vg_b58_decode_check(const char *input, void *buf, size_t len)
 	if (zpfx)
 		memset(xbuf, 0, zpfx);
 	if (c)
-		BN_bn2bin(&bn, xbuf + zpfx);
+		BN_bn2bin(bn, xbuf + zpfx);
 
 	/* Check the hash code */
 	l -= 4;
-	SHA256(xbuf, l, hash1);
-	SHA256(hash1, sizeof(hash1), hash2);
-	if (memcmp(hash2, xbuf + l, 4))
-		goto out;
+
+	if(!GRSFlag)
+	{
+		SHA256(xbuf, l, hash1);
+		SHA256(hash1, sizeof(hash1), hash2);
+		if (memcmp(hash2, xbuf + l, 4))
+			goto out;
+	}
+	else
+	{
+		sph_groestl512_context ctx;
+		
+		sph_groestl512_init(&ctx);
+		sph_groestl512(&ctx, xbuf, l);
+		sph_groestl512_close(&ctx, groestlhash1);
+		
+		sph_groestl512_init(&ctx);
+		sph_groestl512(&ctx, groestlhash1, sizeof(groestlhash1));
+		sph_groestl512_close(&ctx, groestlhash2);
+
+		if (memcmp(groestlhash2, xbuf + l, 4))
+			goto out;
+	}
 
 	/* Buffer verified */
 	if (len) {
@@ -228,9 +270,9 @@ vg_b58_decode_check(const char *input, void *buf, size_t len)
 out:
 	if (xbuf)
 		free(xbuf);
-	BN_clear_free(&bn);
-	BN_clear_free(&bnw);
-	BN_clear_free(&bnbase);
+	BN_clear_free(bn);
+	BN_clear_free(bnw);
+	BN_clear_free(bnbase);
 	BN_CTX_free(bnctx);
 	return res;
 }
@@ -252,6 +294,30 @@ vg_encode_address(const EC_POINT *ppoint, const EC_GROUP *pgroup,
 			   sizeof(eckey_buf),
 			   NULL);
 	pend = eckey_buf + 0x41;
+	binres[0] = addrtype;
+	SHA256(eckey_buf, pend - eckey_buf, hash1);
+	RIPEMD160(hash1, sizeof(hash1), &binres[1]);
+
+	vg_b58_encode_check(binres, sizeof(binres), result);
+}
+
+void
+vg_encode_address_compressed(const EC_POINT *ppoint, const EC_GROUP *pgroup,
+		  int addrtype, char *result)
+{
+	unsigned char eckey_buf[128], *pend;
+	unsigned char binres[21] = {0,};
+	unsigned char hash1[32];
+
+	pend = eckey_buf;
+
+	EC_POINT_point2oct(pgroup,
+			   ppoint,
+			   POINT_CONVERSION_COMPRESSED,
+			   eckey_buf,
+			   sizeof(eckey_buf),
+			   NULL);
+	pend = eckey_buf + 0x21;
 	binres[0] = addrtype;
 	SHA256(eckey_buf, pend - eckey_buf, hash1);
 	RIPEMD160(hash1, sizeof(hash1), &binres[1]);
@@ -306,6 +372,26 @@ vg_encode_privkey(const EC_KEY *pkey, int addrtype, char *result)
 	vg_b58_encode_check(eckey_buf, 33, result);
 }
 
+void
+vg_encode_privkey_compressed(const EC_KEY *pkey, int addrtype, char *result)
+{
+	unsigned char eckey_buf[128];
+	const BIGNUM *bn;
+	int nbytes;
+
+	bn = EC_KEY_get0_private_key(pkey);
+
+	eckey_buf[0] = addrtype;
+	nbytes = BN_num_bytes(bn);
+	assert(nbytes <= 32);
+	if (nbytes < 32)
+		memset(eckey_buf + 1, 0, 32 - nbytes);
+	BN_bn2bin(bn, &eckey_buf[33 - nbytes]);
+	eckey_buf[33] = 1;
+
+	vg_b58_encode_check(eckey_buf, 34, result);
+}
+
 int
 vg_set_privkey(const BIGNUM *bnpriv, EC_KEY *pkey)
 {
@@ -334,20 +420,22 @@ vg_set_privkey(const BIGNUM *bnpriv, EC_KEY *pkey)
 int
 vg_decode_privkey(const char *b58encoded, EC_KEY *pkey, int *addrtype)
 {
-	BIGNUM bnpriv;
+	BIGNUM *bnpriv;
 	unsigned char ecpriv[48];
-	int res;
+	int res, ret;
 
 	res = vg_b58_decode_check(b58encoded, ecpriv, sizeof(ecpriv));
-	if (res != 33)
+	if (res < 33 || res > 34)
 		return 0;
 
-	BN_init(&bnpriv);
-	BN_bin2bn(ecpriv + 1, res - 1, &bnpriv);
-	res = vg_set_privkey(&bnpriv, pkey);
-	BN_clear_free(&bnpriv);
+	ret = res - 32;
+
+	bnpriv = BN_new();
+	BN_bin2bn(ecpriv + 1, 32, bnpriv);
+	res = vg_set_privkey(bnpriv, pkey);
+	BN_clear_free(bnpriv);
 	*addrtype = ecpriv[0];
-	return 1;
+	return ret;
 }
 
 #if OPENSSL_VERSION_NUMBER < 0x10000000L
@@ -544,15 +632,15 @@ vg_protect_crypt(int parameter_group,
 		salt_len = 4;
 		hmac_len = 8;
 		hmac_keylen = 16;
-		ciphertext_len = ((plaintext_len + cipher->block_size - 1) /
-				  cipher->block_size) * cipher->block_size;
+		ciphertext_len = ((plaintext_len + EVP_CIPHER_block_size(cipher) - 1) /
+				  EVP_CIPHER_block_size(cipher)) * EVP_CIPHER_block_size(cipher);
 		pkcs7_padding = 0;
 		hmac_digest = EVP_sha256();
 	} else {
 		/* PKCS-compliant encoding */
 		salt_len = 8;
-		ciphertext_len = ((plaintext_len + cipher->block_size) /
-				  cipher->block_size) * cipher->block_size;
+		ciphertext_len = ((plaintext_len + EVP_CIPHER_block_size(cipher)) /
+				  EVP_CIPHER_block_size(cipher)) * EVP_CIPHER_block_size(cipher);
 		hmac_digest = NULL;
 	}
 
@@ -578,12 +666,12 @@ vg_protect_crypt(int parameter_group,
 			  salt, salt_len,
 			  params->iterations,
 			  pbkdf_digest,
-			  cipher->key_len + cipher->iv_len + hmac_keylen,
+			  EVP_CIPHER_key_length(cipher) + EVP_CIPHER_iv_length(cipher) + hmac_keylen,
 			  keymaterial);
 
 	if (!EVP_CipherInit(ctx, cipher,
 			    keymaterial,
-			    keymaterial + cipher->key_len,
+			    keymaterial + EVP_CIPHER_key_length(cipher),
 			    enc)) {
 		fprintf(stderr, "ERROR: could not configure cipher\n");
 		goto out;
@@ -619,7 +707,7 @@ vg_protect_crypt(int parameter_group,
 	if (hmac_len) {
 		hlen = sizeof(hmac);
 		HMAC(hmac_digest,
-		     keymaterial + cipher->key_len + cipher->iv_len,
+		     keymaterial + EVP_CIPHER_key_length(cipher) + EVP_CIPHER_iv_length(cipher),
 		     hmac_keylen,
 		     enc ? data_in : data_out, plaintext_len,
 		     hmac, &hlen);
@@ -698,7 +786,7 @@ vg_protect_decode_privkey(EC_KEY *pkey, int *keytype,
 {
 	unsigned char ecpriv[64];
 	unsigned char ecenc[128];
-	BIGNUM bn;
+	BIGNUM *bn;
 	int restype;
 	int res;
 
@@ -722,10 +810,10 @@ vg_protect_decode_privkey(EC_KEY *pkey, int *keytype,
 
 	res = 1;
 	if (pkey) {
-		BN_init(&bn);
-		BN_bin2bn(ecpriv, 32, &bn);
-		res = vg_set_privkey(&bn, pkey);
-		BN_clear_free(&bn);
+		bn = BN_new();
+		BN_bin2bn(ecpriv, 32, bn);
+		res = vg_set_privkey(bn, pkey);
+		BN_clear_free(bn);
 		OPENSSL_cleanse(ecpriv, sizeof(ecpriv));
 	}
 
@@ -870,8 +958,8 @@ vg_decode_privkey_any(EC_KEY *pkey, int *addrtype, const char *input,
 {
 	int res;
 
-	if (vg_decode_privkey(input, pkey, addrtype))
-		return 1;
+	if ((res = vg_decode_privkey(input, pkey, addrtype)))
+		return res;
 	if (vg_protect_decode_privkey(pkey, addrtype, input, NULL)) {
 		if (!pass)
 			return -1;
@@ -1069,6 +1157,7 @@ vg_read_file(FILE *fp, char ***result, int *rescount)
 					}
 					patterns[npatterns] = pat;
 					npatterns++;
+					fprintf(stderr,	"\rLoading Pattern #%d: %s", npatterns, pat);
 					pat = NULL;
 				}
 			}
@@ -1083,6 +1172,6 @@ vg_read_file(FILE *fp, char ***result, int *rescount)
 
 	*result = patterns;
 	*rescount = npatterns;
-
+	fprintf(stderr,	"\n");
 	return ret;
 }

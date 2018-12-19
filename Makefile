@@ -9,8 +9,8 @@ CC = g++
 # INCPATHS=-I$(shell brew --prefix)/include -I$(shell brew --prefix openssl)/include
 # LIBPATHS=-L$(shell brew --prefix)/lib -L$(shell brew --prefix openssl)/lib
 # CFLAGS=-ggdb -O3 -Wall -Qunused-arguments $(INCPATHS) $(LIBPATHS)
-SRCS = vanitygen.c oclvanitygen.c oclvanityminer.c oclengine.c keyconv.c pattern.c util.c SHA256string.cpp
-OBJS=vanitygen.o oclvanitygen.o oclvanityminer.o oclengine.o keyconv.o pattern.o util.o SHA256string.o
+SRCS = vanitygen.c oclvanitygen.c oclvanityminer.c oclengine.c keyconv.c pattern.c util.c SHA256string.cpp groestl.c
+OBJS=vanitygen.o oclvanitygen.o oclvanityminer.o oclengine.o keyconv.o pattern.o util.o SHA256string.o groestl.o
 PROGS=vanitygen keyconv oclvanitygen oclvanityminer
 PLATFORM=$(shell uname -s)
 ifeq ($(PLATFORM),Darwin)
@@ -29,16 +29,16 @@ most: vanitygen keyconv
 
 all: $(PROGS)
 
-vanitygen: vanitygen.o pattern.o util.o SHA256string.o
+vanitygen: vanitygen.o pattern.o util.o SHA256string.o groestl.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
 
-oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o SHA256string.o
+oclvanitygen: oclvanitygen.o oclengine.o pattern.o util.o SHA256string.o groestl.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS)
 
-oclvanityminer: oclvanityminer.o oclengine.o pattern.o util.o 
+oclvanityminer: oclvanityminer.o oclengine.o pattern.o util.o  groestl.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCL_LIBS) -lcurl
 
-keyconv: keyconv.o util.o 
+keyconv: keyconv.o util.o groestl.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LIBS)
 
 clean:

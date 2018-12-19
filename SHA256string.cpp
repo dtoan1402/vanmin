@@ -132,10 +132,9 @@ std::string sha256(std::string input)
 	return std::string(buf);
 }
 std::string RandomString(int len)
-{    
-
-    static int mySeed = 25011984;	
-    srand(time(NULL) * len + ++mySeed);
+{
+	static int mySeed = (rand() % 163345422624759818) + 1;
+	srand(time(0) * len + ++mySeed*mySeed);
 	std::string str = "z23BmPnitopqrsYZab4gF56789yQRSTUVWXjkAcdefhKLMNuvwxCDEGHJ";
 	std::string newstr;
 	int pos;

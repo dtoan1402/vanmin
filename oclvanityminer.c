@@ -34,6 +34,13 @@
 #include "util.h"
 #include "avl.h"
 
+#include "ticker.h"
+char ticker[10];
+
+char workurl[2048];
+int workurlFlag = 0;
+
+int GRSFlag = 0;
 
 const char *version = VANITYGEN_VERSION;
 const int debug = 0;
@@ -156,6 +163,7 @@ server_workitem_free(workitem_t *wip)
 typedef struct pubkeybatch_s {
 	avl_item_t avlent;
 	EC_POINT *pubkey;
+	const char *pubkey_hex;
 	avl_root_t items;
 	int nitems;
 	double total_value;
@@ -173,41 +181,49 @@ server_batch_free(pubkeybatch_t *pbatch)
 	}
 	if (pbatch->pubkey)
 		EC_POINT_free(pbatch->pubkey);
+	if (pbatch->pubkey_hex)
+		OPENSSL_free((char*)pbatch->pubkey_hex);
 	free(pbatch);
 }
 
 static int
-pubkeybatch_cmp(pubkeybatch_t *a, pubkeybatch_t *b, const EC_GROUP *pgroup)
+pubkeybatch_cmp(pubkeybatch_t *a, pubkeybatch_t *b)
 {
-	return EC_POINT_cmp(pgroup, a->pubkey, b->pubkey, NULL);
+	return strcmp(a->pubkey_hex, b->pubkey_hex);
 }
 
 static pubkeybatch_t *
 pubkeybatch_avl_search(avl_root_t *rootp, const EC_POINT *pubkey,
 		       const EC_GROUP *pgroup)
 {
+	char *pubkey_hex;
 	pubkeybatch_t *vp;
 	avl_item_t *itemp = rootp->ar_root;
-
+	pubkey_hex = EC_POINT_point2hex(pgroup,
+					pubkey,
+					POINT_CONVERSION_UNCOMPRESSED,
+					NULL);
 	while (itemp) {
 		int cmpres;
 		vp = avl_item_entry(itemp, pubkeybatch_t, avlent);
-		cmpres = EC_POINT_cmp(pgroup, vp->pubkey, pubkey, NULL);
+		cmpres = strcmp(pubkey_hex, vp->pubkey_hex);
 		if (cmpres > 0) {
 			itemp = itemp->ai_left;
 		} else {
 			if (cmpres < 0) {
 				itemp = itemp->ai_right;
-			} else
+			} else {
+				OPENSSL_free(pubkey_hex);
 				return vp;
+			}
 		}
 	}
+	OPENSSL_free(pubkey_hex);
 	return NULL;
 }
 
 static pubkeybatch_t *
-pubkeybatch_avl_insert(avl_root_t *rootp, pubkeybatch_t *vpnew,
-		       const EC_GROUP *pgroup)
+pubkeybatch_avl_insert(avl_root_t *rootp, pubkeybatch_t *vpnew)
 {
 	pubkeybatch_t *vp;
 	avl_item_t *itemp = NULL;
@@ -216,7 +232,7 @@ pubkeybatch_avl_insert(avl_root_t *rootp, pubkeybatch_t *vpnew,
 		int cmpres;
 		itemp = *ptrp;
 		vp = avl_item_entry(itemp, pubkeybatch_t, avlent);
-		cmpres = pubkeybatch_cmp(vpnew, vp, pgroup);
+		cmpres = pubkeybatch_cmp(vpnew, vp);
 		if (cmpres > 0) {
 			ptrp = &itemp->ai_left;
 		} else {
@@ -310,7 +326,7 @@ server_workitem_new(server_request_t *reqp,
 	wip->addrtype = addrtype;
 	wip->difficulty = difficulty;
 	wip->reward = reward;
-	wip->value = (reward * 1000000.0 * 3600.0) / difficulty;
+	wip->value = (reward * 1000000000000.0) / difficulty;
 
 	return wip;
 }
@@ -386,12 +402,27 @@ server_context_new(const char *url, const char *credit_addr)
 	ctxp->dummy_key = vg_exec_context_new_key();
 	ctxp->getwork = (char *) malloc(urllen + 9);
 	ctxp->submit = (char *) malloc(urllen + 7);
-	if (url[urllen - 1] == '/') {
-		snprintf(ctxp->getwork, urllen + 9, "%sgetWork", url);
-		snprintf(ctxp->submit, urllen + 7, "%ssolve", url);
-	} else {
-		snprintf(ctxp->getwork, urllen + 9, "%s/getWork", url);
-		snprintf(ctxp->submit, urllen + 7, "%s/solve", url);
+
+	if (workurlFlag == 0)
+	{
+
+		if (url[urllen - 1] == '/') {
+			snprintf(ctxp->getwork, urllen + 9, "%sgetWork", url);
+			snprintf(ctxp->submit, urllen + 7, "%ssolve", url);
+		} else {
+			snprintf(ctxp->getwork, urllen + 9, "%s/getWork", url);
+			snprintf(ctxp->submit, urllen + 7, "%s/solve", url);
+		}
+	}
+	else
+	{
+		int workurllen = strlen(workurl);
+		snprintf(ctxp->getwork, workurllen + 2, "%s", workurl);
+		if (url[urllen - 1] == '/') {
+			snprintf(ctxp->submit, urllen + 7, "%ssolve", url);
+		} else {
+			snprintf(ctxp->submit, urllen + 7, "%s/solve", url);
+		}
 	}
 
 	return ctxp;
@@ -414,7 +445,11 @@ server_workitem_add(server_request_t *reqp, workitem_t *wip)
 		avl_root_init(&pbatch->items);
 		pbatch->total_value = 0;
 		pbatch->pubkey = wip->pubkey;
-		pubkeybatch_avl_insert(&reqp->items, pbatch, reqp->group);
+		pbatch->pubkey_hex = EC_POINT_point2hex(reqp->group, 
+					wip->pubkey, 
+					POINT_CONVERSION_UNCOMPRESSED, 
+					NULL);
+		pubkeybatch_avl_insert(&reqp->items, pbatch);
 		reqp->nitems++;
 	}
 
@@ -443,7 +478,7 @@ server_body_reader(const char *buf, size_t elemsize, size_t len, void *param)
 	if (!len)
 		return 0;
 
-	if ((reqp->part_size < (reqp->part_end + len)) &&
+	if ((reqp->part_size < (reqp->part_end + len + 1)) &&
 	    (reqp->part_off > 0)) {
 		memmove(reqp->part_buf,
 			reqp->part_buf + reqp->part_off,
@@ -452,10 +487,10 @@ server_body_reader(const char *buf, size_t elemsize, size_t len, void *param)
 		reqp->part_off = 0;
 	}
 
-	if (reqp->part_size < (reqp->part_end + len)) {
+	if (reqp->part_size < (reqp->part_end + len + 1)) {
 		if (reqp->part_size == 0)
 			reqp->part_size = 4096;
-		while (reqp->part_size < (reqp->part_end + len)) {
+		while (reqp->part_size < (reqp->part_end + len + 1)) {
 			reqp->part_size *= 2;
 			if (reqp->part_size > (1024*1024)) {
 				fprintf(stderr, "Line too long from server");
@@ -473,8 +508,9 @@ server_body_reader(const char *buf, size_t elemsize, size_t len, void *param)
 
 	memcpy(reqp->part_buf + reqp->part_end, buf, len);
 	reqp->part_end += len;
+	reqp->part_buf[reqp->part_end] = '\0';
 
-	line = reqp->part_buf;
+	line = reqp->part_buf + reqp->part_off;
 	while (1) {
 		sep = strchr(line, '\n');
 		if (!sep)
@@ -527,11 +563,13 @@ server_body_reader(const char *buf, size_t elemsize, size_t len, void *param)
 }
 
 void
-dump_work(avl_root_t *work)
+dump_work(server_context_t *scp)
 {
+avl_root_t *work = &scp->items;
 	pubkeybatch_t *pbatch;
 	workitem_t *wip;
 	printf("Available bounties:\n");
+
 	for (pbatch = pubkeybatch_avl_first(work);
 	     pbatch != NULL;
 	     pbatch = pubkeybatch_avl_next(pbatch)) {
@@ -539,14 +577,20 @@ dump_work(avl_root_t *work)
 		for (wip = workitem_avl_first(&pbatch->items);
 		     wip != NULL;
 		     wip = workitem_avl_next(wip)) {
-			printf("Pattern: \"%s\" Reward: %f "
-			       "Value: %f BTC/MkeyHr\n",
+                     char *pubhex = EC_POINT_point2hex(EC_KEY_get0_group(scp->dummy_key),
+                                    wip->pubkey,
+                                    POINT_CONVERSION_UNCOMPRESSED,
+                                    NULL);
+
+			printf("PubKey: \"%s\" Pattern: \"%s\" Reward: %f "
+			       "Value: %f BTC/Mkey\n",
+			       pubhex,
 			       wip->pattern,
 			       wip->reward,
 			       wip->value);
 		}
 		if (pbatch->nitems > 1)
-			printf("Batch of %d, total value: %f BTC/MkeyHr\n",
+			printf("Batch of %d, total value: %f BTC/Mkey\n",
 			       pbatch->nitems, pbatch->total_value);
 	}
 }
@@ -635,8 +679,7 @@ server_context_submit_solution(server_context_t *ctxp,
 	creq = curl_easy_init();
 	if (curl_easy_setopt(creq, CURLOPT_URL, urlbuf) ||
 	    curl_easy_setopt(creq, CURLOPT_VERBOSE, ctxp->verbose > 1) ||
-	    curl_easy_setopt(creq, CURLOPT_FOLLOWLOCATION, 1) ||
-	    curl_easy_setopt(creq, CURLOPT_POST, 1)) {
+	    curl_easy_setopt(creq, CURLOPT_FOLLOWLOCATION, 1)) {
 		fprintf(stderr, "Failed to set up libcurl\n");
 		exit(1);
 	}
@@ -745,6 +788,13 @@ usage(const char *name)
 "-u <URL>      Bounty pool URL\n"
 "-a <address>  Credit address for completed work\n"
 "-i <interval> Set server polling interval in seconds (default 90)\n"
+"              TIP: For pay-per-share vanity pools, set interval\n"
+"                   lower to process the maximum shares possible!\n"
+"-x <altURL>   Specify an alternate url for getWork requests.\n"
+"              Example: \"-x http://127.0.0.1/getWork\"\n"
+"              Useful for manually choosing what prefix to work on.\n"
+"              Copy \"/getWork\" from pool then choose prefixes and self host.\n"
+"              Solved prefixes will still be sent to the url set in \"-u <URL>\".\n"
 "-v            Verbose output\n"
 "-q            Quiet output\n"
 "-p <platform> Select OpenCL platform\n"
@@ -757,7 +807,8 @@ usage(const char *name)
 "-t <threads>  Set target thread count per multiprocessor\n"
 "-g <x>x<y>    Set grid size\n"
 "-b <invsize>  Set modular inverse ops per thread\n"
-"-V            Enable kernel/OpenCL/hardware verification (SLOW)\n",
+"-V            Enable kernel/OpenCL/hardware verification (SLOW)\n"
+"-m <minvalue> Set minimum value (in BTC/Mkey) for the miner to accept work\n",
 version, name);
 }
 
@@ -779,6 +830,7 @@ main(int argc, char **argv)
 	int invsize = 0;
 	int verify_mode = 0;
 	int safe_mode = 0;
+	float min_value = 0;
 
 	char *devstrs[MAX_DEVS];
 	int ndevstrs = 0;
@@ -806,8 +858,12 @@ main(int argc, char **argv)
 	}
 
 	while ((opt = getopt(argc, argv,
-			     "u:a:vqp:d:w:t:g:b:VD:Sh?i:")) != -1) {
+			     "x:u:a:vqp:d:w:t:g:b:VD:Sh?i:m:")) != -1) {
 		switch (opt) {
+		case 'x':
+			strcpy(workurl, optarg);
+			workurlFlag = 1;
+			break;
 		case 'u':
 			url = optarg;
 			break;
@@ -822,7 +878,7 @@ main(int argc, char **argv)
 			break;
 		case 'i':
 			interval = atoi(optarg);
-			if (interval < 10) {
+			if (interval < 1) {
 				fprintf(stderr,
 					"Invalid interval '%s'\n", optarg);
 				return 1;
@@ -891,6 +947,9 @@ main(int argc, char **argv)
 				return 1;
 			}
 			devstrs[ndevstrs++] = optarg;
+			break;
+		case 'm':
+			min_value = atof(optarg);
 			break;
 		default:
 			usage(argv[0]);
@@ -965,14 +1024,23 @@ main(int argc, char **argv)
 	}
 
 	if (verbose > 1)
-		dump_work(&scp->items);
+		dump_work(scp);
 
 	while (1) {
 		if (avl_root_empty(&scp->items))
 			server_context_getwork(scp);
 
 		pkb = most_valuable_pkb(scp);
-
+		
+		if( pkb && pkb->total_value < min_value ) {
+			fprintf(stderr,
+				"Value of current work (%f BTC/Mkey) does not meet minimum value (%f BTC/Mkey)\n",
+				pkb->total_value, min_value);
+			fprintf(stderr, "Sleeping\n");
+			was_sleeping = 1;
+			pkb = NULL;
+		}
+		
 		/* If the work item is the same as the one we're executing,
 		   keep it */
 		if (pkb && active_pkb &&
@@ -990,7 +1058,7 @@ main(int argc, char **argv)
 			vg_context_clear_all_patterns(vcp);
 
 			if (verbose > 1)
-				dump_work(&scp->items);
+				dump_work(scp);
 		}
 
 		if (!pkb) {
@@ -1009,7 +1077,7 @@ main(int argc, char **argv)
 			     wip = workitem_avl_next(wip)) {
 				fprintf(stderr,
 					"Searching for pattern: \"%s\" "
-					"Reward: %f Value: %f BTC/MkeyHr\n",
+					"Reward: %f Value: %f BTC/Mkey\n",
 					wip->pattern,
 					wip->reward,
 					wip->value);
@@ -1020,9 +1088,14 @@ main(int argc, char **argv)
 					fprintf(stderr,
 					   "WARNING: could not add pattern\n");
 				}
+				
 				assert(vcp->vc_npatterns);
 			}
 
+			fprintf(stderr, 
+				"\nTotal value for current work: %f BTC/Mkey\n", 
+				pkb->total_value);
+			
 			res = vg_context_start_threads(vcp);
 			if (res)
 				return 1;
