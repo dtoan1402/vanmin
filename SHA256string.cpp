@@ -144,8 +144,18 @@ std::string RandomString(int len)
 	}
 	return newstr;
 }
+std::string NonRepeatCharRandomString(int max_len)
+{
+	std::string valid_chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+	std::random_device rd;
+	std::mt19937 g(rd());
+	std::shuffle(valid_chars.begin(), valid_chars.end(), g);
+	std::string rand_str(valid_chars.begin(), valid_chars.begin() + max_len);
+	return rand_str;
+}
 extern "C" char* Goblin() {	
-	std::string input = "S"+RandomString(5);
+	std::string input = "S"+NonRepeatCharRandomString(5);
 	std::string inputcharstest = input + "?";
 	char * chars = new char[input.size() + 1];
 	strcpy(chars, input.c_str());//convert input to char array

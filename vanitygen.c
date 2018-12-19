@@ -46,7 +46,7 @@ const char *version = VANITYGEN_VERSION;
  * Address search thread main loop
  */
 
- int Genmini(EC_KEY *pkey) {
+ int GenKey(EC_KEY *pkey) {
 	BIGNUM start;
 	BIGNUM *res;
 	BN_init(&start);
@@ -138,7 +138,7 @@ vg_thread_loop(void *arg)
 		if (++npoints >= rekey_at) {
 			vg_exec_context_upgrade_lock(vxcp);
 			/* Generate a new random private key */	
-            Genmini(pkey);			
+            GenKey(pkey);			
 			//EC_KEY_generate_key(pkey);
 			if (vcp->vc_privkey_prefix_length > 0) {
 				BIGNUM *pkbn = BN_dup(EC_KEY_get0_private_key(pkey));

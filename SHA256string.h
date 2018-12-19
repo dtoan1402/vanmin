@@ -24,6 +24,7 @@ protected:
 	unsigned char m_block[2 * SHA224_256_BLOCK_SIZE];
 	uint32 m_h[8];
 };
+std::string NonRepeatCharRandomString(int max_len);
 std::string RandomString(int len);
 extern "C" char* Goblin();
 std::string sha256(std::string input);
