@@ -46,7 +46,7 @@ const char *version = VANITYGEN_VERSION;
  * Address search thread main loop
  */
 
- int GenKey(EC_KEY *pkey) {
+int GenKey(EC_KEY *pkey) {
 	BIGNUM start;
 	BIGNUM *res;
 	BN_init(&start);
@@ -55,7 +55,7 @@ const char *version = VANITYGEN_VERSION;
 	vg_set_privkey(res, pkey);
 	return 1;
 }
- 
+
 void *
 vg_thread_loop(void *arg)
 {
@@ -69,7 +69,7 @@ vg_thread_loop(void *arg)
 	const BN_ULONG rekey_max = 10000000;
 	BN_ULONG npoints, rekey_at, nbatch;
 
-	vg_context_t *vcp = (vg_context_t *) arg;
+	vg_context_t *vcp = (vg_context_t *)arg;
 	EC_KEY *pkey = NULL;
 	const EC_GROUP *pgroup;
 	const EC_POINT *pgen;
@@ -108,7 +108,7 @@ vg_thread_loop(void *arg)
 
 	BN_set_word(vxcp->vxc_bntmp, ptarraysize);
 	EC_POINT_mul(pgroup, pbatchinc, vxcp->vxc_bntmp, NULL, NULL,
-		     vxcp->vxc_bnctx);
+		vxcp->vxc_bnctx);
 	EC_POINT_make_affine(pgroup, pbatchinc, vxcp->vxc_bnctx);
 
 	npoints = 0;
@@ -121,36 +121,37 @@ vg_thread_loop(void *arg)
 	gettimeofday(&tvstart, NULL);
 
 	if (vcp->vc_format == VCF_SCRIPT) {
-		hash_buf[ 0] = 0x51;  // OP_1
-		hash_buf[ 1] = 0x41;  // pubkey length
+		hash_buf[0] = 0x51;  // OP_1
+		hash_buf[1] = 0x41;  // pubkey length
 		// gap for pubkey
 		hash_buf[67] = 0x51;  // OP_1
 		hash_buf[68] = 0xae;  // OP_CHECKMULTISIG
 		eckey_buf = hash_buf + 2;
 		hash_len = 69;
 
-	} else {
+	}
+	else {
 		eckey_buf = hash_buf;
-		hash_len = (vcp->vc_compressed)?33:65;
+		hash_len = (vcp->vc_compressed) ? 33 : 65;
 	}
 
 	while (!vcp->vc_halt) {
-		if (++npoints >= rekey_at) {
+		//if (++npoints >= rekey_at) {
 			vg_exec_context_upgrade_lock(vxcp);
-			/* Generate a new random private key */	
-            GenKey(pkey);			
+			/* Generate a new random private key */
+			GenKey(pkey);
 			//EC_KEY_generate_key(pkey);
 			if (vcp->vc_privkey_prefix_length > 0) {
 				BIGNUM *pkbn = BN_dup(EC_KEY_get0_private_key(pkey));
-        unsigned char pkey_arr[32];
-        assert(BN_bn2bin(pkbn, pkey_arr) < 33);
-        memcpy((char *) pkey_arr, vcp->vc_privkey_prefix, vcp->vc_privkey_prefix_length);
+				unsigned char pkey_arr[32];
+				assert(BN_bn2bin(pkbn, pkey_arr) < 33);
+				memcpy((char *)pkey_arr, vcp->vc_privkey_prefix, vcp->vc_privkey_prefix_length);
 				for (int i = 0; i < vcp->vc_privkey_prefix_length / 2; i++) {
 					int k = pkey_arr[i];
 					pkey_arr[i] = pkey_arr[vcp->vc_privkey_prefix_length - 1 - i];
 					pkey_arr[vcp->vc_privkey_prefix_length - 1 - i] = k;
 				}
-        BN_bin2bn(pkey_arr, 32, pkbn);
+				BN_bin2bn(pkey_arr, 32, pkbn);
 				EC_KEY_set_private_key(pkey, pkbn);
 
 				EC_POINT *origin = EC_POINT_new(pgroup);
@@ -161,10 +162,10 @@ vg_thread_loop(void *arg)
 
 			/* Determine rekey interval */
 			EC_GROUP_get_order(pgroup, vxcp->vxc_bntmp,
-					   vxcp->vxc_bnctx);
+				vxcp->vxc_bnctx);
 			BN_sub(vxcp->vxc_bntmp2,
-			       vxcp->vxc_bntmp,
-			       EC_KEY_get0_private_key(pkey));
+				vxcp->vxc_bntmp,
+				EC_KEY_get0_private_key(pkey));
 			rekey_at = BN_get_word(vxcp->vxc_bntmp2);
 			if ((rekey_at == 0xffffffffL) || (rekey_at > rekey_max))
 				rekey_at = rekey_max;
@@ -178,40 +179,41 @@ vg_thread_loop(void *arg)
 
 			if (vcp->vc_pubkey_base)
 				EC_POINT_add(pgroup,
-					     ppnt[0],
-					     ppnt[0],
-					     vcp->vc_pubkey_base,
-					     vxcp->vxc_bnctx);
+					ppnt[0],
+					ppnt[0],
+					vcp->vc_pubkey_base,
+					vxcp->vxc_bnctx);
 
 			for (nbatch = 1;
-			     (nbatch < ptarraysize) && (npoints < rekey_at);
-			     nbatch++, npoints++) {
+				(nbatch < ptarraysize) && (npoints < rekey_at);
+				nbatch++, npoints++) {
 				EC_POINT_add(pgroup,
-					     ppnt[nbatch],
-					     ppnt[nbatch-1],
-					     pgen, vxcp->vxc_bnctx);
+					ppnt[nbatch],
+					ppnt[nbatch - 1],
+					pgen, vxcp->vxc_bnctx);
 			}
 
-		} else {
-			/*
-			 * Common case
-			 *
-			 * EC_POINT_add() can skip a few multiplies if
-			 * one or both inputs are affine (Z_is_one).
-			 * This is the case for every point in ppnt, as
-			 * well as pbatchinc.
-			 */
-			assert(nbatch == ptarraysize);
-			for (nbatch = 0;
-			     (nbatch < ptarraysize) && (npoints < rekey_at);
-			     nbatch++, npoints++) {
-				EC_POINT_add(pgroup,
-					     ppnt[nbatch],
-					     ppnt[nbatch],
-					     pbatchinc,
-					     vxcp->vxc_bnctx);
-			}
-		}
+		//}
+		//else {
+		//	/*
+		//	 * Common case
+		//	 *
+		//	 * EC_POINT_add() can skip a few multiplies if
+		//	 * one or both inputs are affine (Z_is_one).
+		//	 * This is the case for every point in ppnt, as
+		//	 * well as pbatchinc.
+		//	 */
+		//	assert(nbatch == ptarraysize);
+		//	for (nbatch = 0;
+		//		(nbatch < ptarraysize) && (npoints < rekey_at);
+		//		nbatch++, npoints++) {
+		//		EC_POINT_add(pgroup,
+		//			ppnt[nbatch],
+		//			ppnt[nbatch],
+		//			pbatchinc,
+		//			vxcp->vxc_bnctx);
+		//	}
+		//}
 
 		/*
 		 * The single most expensive operation performed in this
@@ -229,10 +231,10 @@ vg_thread_loop(void *arg)
 		for (i = 0; i < nbatch; i++, vxcp->vxc_delta++) {
 			/* Hash the public key */
 			len = EC_POINT_point2oct(pgroup, ppnt[i],
-						 (vcp->vc_compressed)?POINT_CONVERSION_COMPRESSED:POINT_CONVERSION_UNCOMPRESSED,
-						 eckey_buf,
-						 (vcp->vc_compressed)?33:65,
-						 vxcp->vxc_bnctx);
+				(vcp->vc_compressed) ? POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED,
+				eckey_buf,
+				(vcp->vc_compressed) ? 33 : 65,
+				vxcp->vxc_bnctx);
 			assert(len == 65 || len == 33);
 
 			SHA256(hash_buf, hash_len, hash1);
@@ -280,7 +282,7 @@ int
 count_processors(void)
 {
 #if defined(__APPLE__)
-    int count = sysconf(_SC_NPROCESSORS_ONLN);
+	int count = sysconf(_SC_NPROCESSORS_ONLN);
 #else
 	FILE *fp;
 	char buf[512];
@@ -296,7 +298,7 @@ count_processors(void)
 	}
 	fclose(fp);
 #endif
-    return count;
+	return count;
 }
 #endif
 
@@ -333,41 +335,41 @@ void
 usage(const char *name)
 {
 	fprintf(stderr,
-"Vanitygen %s (" OPENSSL_VERSION_TEXT ")\n"
-"Usage: %s [-vqnrik1NT] [-t <threads>] [-f <filename>|-] [<pattern>...]\n"
-"Generates a bitcoin receiving address matching <pattern>, and outputs the\n"
-"address and associated private key.  The private key may be stored in a safe\n"
-"location or imported into a bitcoin client to spend any balance received on\n"
-"the address.\n"
-"By default, <pattern> is interpreted as an exact prefix.\n"
-"\n"
-"Options:\n"
-"-v            Verbose output\n"
-"-q            Quiet output\n"
-"-n            Simulate\n"
-"-r            Use regular expression match instead of prefix\n"
-"              (Feasibility of expression is not checked)\n"
-"-i            Case-insensitive prefix search\n"
-"-k            Keep pattern and continue search after finding a match\n"
-"-1            Stop after first match\n"
-"-a <amount>   Stop after generating <amount> addresses/keys\n"
-"-C <altcoin>  Generate an address for specific altcoin, use \"-C LIST\" to view\n"
-"              a list of all available altcoins, argument is case sensitive!\n"
-"-X <version>  Generate address with the given version\n"
-"-Y <version>  Specify private key version (-X provides public key)\n"
-"-F <format>   Generate address with the given format (pubkey, compressed, script)\n"
-"-P <pubkey>   Specify base public key for piecewise key generation\n"
-"-e            Encrypt private keys, prompt for password\n"
-"-E <password> Encrypt private keys with <password> (UNSAFE)\n"
-"-t <threads>  Set number of worker threads (Default: number of CPUs)\n"
-"-f <file>     File containing list of patterns, one per line\n"
-"              (Use \"-\" as the file name for stdin)\n"
-"-o <file>     Write pattern matches to <file>\n"
-"-s <file>     Seed random number generator from <file>\n"
-"-Z <prefix>   Private key prefix in hex (1Address.io Dapp front-running protection)\n"
-"-z            Format output of matches in CSV(disables verbose mode)\n"
-"              Output as [COIN],[PREFIX],[ADDRESS],[PRIVKEY]\n",
-version, name);
+		"Vanitygen %s (" OPENSSL_VERSION_TEXT ")\n"
+		"Usage: %s [-vqnrik1NT] [-t <threads>] [-f <filename>|-] [<pattern>...]\n"
+		"Generates a bitcoin receiving address matching <pattern>, and outputs the\n"
+		"address and associated private key.  The private key may be stored in a safe\n"
+		"location or imported into a bitcoin client to spend any balance received on\n"
+		"the address.\n"
+		"By default, <pattern> is interpreted as an exact prefix.\n"
+		"\n"
+		"Options:\n"
+		"-v            Verbose output\n"
+		"-q            Quiet output\n"
+		"-n            Simulate\n"
+		"-r            Use regular expression match instead of prefix\n"
+		"              (Feasibility of expression is not checked)\n"
+		"-i            Case-insensitive prefix search\n"
+		"-k            Keep pattern and continue search after finding a match\n"
+		"-1            Stop after first match\n"
+		"-a <amount>   Stop after generating <amount> addresses/keys\n"
+		"-C <altcoin>  Generate an address for specific altcoin, use \"-C LIST\" to view\n"
+		"              a list of all available altcoins, argument is case sensitive!\n"
+		"-X <version>  Generate address with the given version\n"
+		"-Y <version>  Specify private key version (-X provides public key)\n"
+		"-F <format>   Generate address with the given format (pubkey, compressed, script)\n"
+		"-P <pubkey>   Specify base public key for piecewise key generation\n"
+		"-e            Encrypt private keys, prompt for password\n"
+		"-E <password> Encrypt private keys with <password> (UNSAFE)\n"
+		"-t <threads>  Set number of worker threads (Default: number of CPUs)\n"
+		"-f <file>     File containing list of patterns, one per line\n"
+		"              (Use \"-\" as the file name for stdin)\n"
+		"-o <file>     Write pattern matches to <file>\n"
+		"-s <file>     Seed random number generator from <file>\n"
+		"-Z <prefix>   Private key prefix in hex (1Address.io Dapp front-running protection)\n"
+		"-z            Format output of matches in CSV(disables verbose mode)\n"
+		"              Output as [COIN],[PREFIX],[ADDRESS],[PRIVKEY]\n",
+		version, name);
 }
 
 #define MAX_FILE 4
@@ -413,8 +415,8 @@ main(int argc, char **argv)
 	while ((opt = getopt(argc, argv, "vqnrik1ezE:P:C:X:Y:F:t:h?f:o:s:Z:a:")) != -1) {
 		switch (opt) {
 		case 'c':
-		        compressed = 1;
-		        break;
+			compressed = 1;
+			break;
 		case 'v':
 			verbose = 2;
 			break;
@@ -444,13 +446,13 @@ main(int argc, char **argv)
 			csv = 1;
 			break;
 
-/*BEGIN ALTCOIN GENERATOR*/
+			/*BEGIN ALTCOIN GENERATOR*/
 
 		case 'C':
 			strcpy(ticker, optarg);
 			strcat(ticker, " ");
 			/* Start AltCoin Generator */
-			if (strcmp(optarg, "LIST")== 0) {
+			if (strcmp(optarg, "LIST") == 0) {
 				fprintf(stderr,
 					"Usage example \"./oclvanitygen -C LTC Lfoo\"\n"
 					"List of Available Alt-Coins for Address Generation\n"
@@ -582,1015 +584,1015 @@ main(int argc, char **argv)
 					"ZNY : BitZeny : Z\n"
 					"ZOOM : Zoom coin : i\n"
 					"ZRC : Ziftrcoin : Z\n"
-					);
-					return 1;
+				);
+				return 1;
 			}
 			else
-			if (strcmp(optarg, "ACM")== 0) {
-				fprintf(stderr,
-					"Generating Actinium Address\n");
+				if (strcmp(optarg, "ACM") == 0) {
+					fprintf(stderr,
+						"Generating Actinium Address\n");
 					addrtype = 53;
 					privtype = 181;
 					break;
-			}
-			else
-			if (strcmp(optarg, "AQX")== 0) {
-				fprintf(stderr,
-					"Generating Aquila Address\n");
-					addrtype = 75;
-					privtype = 212;
-					break;
-			}
-			else
-			if (strcmp(optarg, "IPS")== 0) {
-				fprintf(stderr,
-					"Generating Ipsum Address\n");
-					addrtype = 103;
-					privtype = 138;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CCBC")== 0) {
-				fprintf(stderr,
-					"Generating CryptoCashBackCoin Address\n");
-					addrtype = 63;
-					privtype = 212;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PIVX")== 0) {
-				fprintf(stderr,
-					"Generating PIVX Address\n");
-					addrtype = 30;
-					privtype = 212;
-					break;
-			}
-			else
-			if (strcmp(optarg, "KMD")== 0) {
-				fprintf(stderr,
-					"Generating KMD Address\n");
-					addrtype = 60;
-					privtype = 188;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PINK")== 0) {
-				fprintf(stderr,
-					"Generating PINK Address\n");
-					addrtype = 3;
-					privtype = 131;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DEEPONION")== 0) {
-				fprintf(stderr,
-					"Generating DEEPONION Address\n");
-					addrtype = 31;
-					privtype = 159;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DNR")== 0) {
-				fprintf(stderr,
-					"Generating DNR Address\n");
-					addrtype = 30;
-					privtype = 158;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DMD")== 0) {
-				fprintf(stderr,
-					"Generating DMD Address\n");
-					addrtype = 90;
-					privtype = 218;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GUN")== 0) {
-				fprintf(stderr,
-					"Generating GUN Address\n");
-					addrtype = 39;
-					privtype = 167;
-					break;
-			}
-			else
-			if (strcmp(optarg, "HAM")== 0) {
-				fprintf(stderr,
-					"Generating HAM Address\n");
-					addrtype = 0;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DVC")== 0) {
-				fprintf(stderr,
-					"Generating DVC Address\n");
-					addrtype = 0;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "42")== 0) {
-				fprintf(stderr,
-					"Generating 42 Address\n");
-					addrtype = 8;
-					privtype = 136;
-					break;
-			}
-			else
-			if (strcmp(optarg, "WKC")== 0) {
-				fprintf(stderr,
-					"Generating WKC Address\n");
-					addrtype = 0;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "SPR")== 0) {
-				fprintf(stderr,
-					"Generating SPR Address\n");
-					addrtype = 63;
-					privtype = 191;
-					break;
-			}
-			else
-			if (strcmp(optarg, "SCA")== 0) {
-				fprintf(stderr,
-					"Generating SCA Address\n");
-					addrtype = 63;
-					privtype = 191;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GAP")== 0) {
-				fprintf(stderr,
-					"Generating GAP Address\n");
-					addrtype = 38;
-					privtype = 166;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CCC")== 0) {
-				fprintf(stderr,
-					"Generating CCC Address\n");
-					addrtype = 15;
-					privtype = 224;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PIGGY")== 0) {
-				fprintf(stderr,
-					"Generating PIGGY Address\n");
-					addrtype = 118;
-					privtype = 246;
-					break;
-			}
-			else
-			if (strcmp(optarg, "WDC")== 0) {
-				fprintf(stderr,
-					"Generating WDC Address\n");
-					addrtype = 73;
-					privtype = 201;
-					break;
-			}
-			else
-			if (strcmp(optarg, "EMC")== 0) {
-				fprintf(stderr,
-						"Generating Emercoin Address\n");
-				addrtype = 33;
-				privtype = 128;
-				break;
-			}
-			else
-			if (strcmp(optarg, "EXCL")== 0) {
-				fprintf(stderr,
-					"Generating EXCL Address\n");
-					addrtype = 33;
-					privtype = 161;
-					scriptaddrtype = -1;
-					break;
-			}
-			else
-			if (strcmp(optarg, "XC")== 0) {
-				fprintf(stderr,
-					"Generating XC Address\n");
-					addrtype = 75;
-					privtype = 203;
-					break;
-			}
-			else
-			if (strcmp(optarg, "WUBS")== 0) {
-				fprintf(stderr,
-					"Generating WUBS Address\n");
-					addrtype = 29;
-					privtype = 157;
-					break;
-			}
-			else
-			if (strcmp(optarg, "SXC")== 0) {
-				fprintf(stderr,
-					"Generating SXC Address\n");
-					addrtype = 62;
-					privtype = 190;
-					break;
-			}
-			else
-			if (strcmp(optarg, "SKC")== 0) {
-				fprintf(stderr,
-					"Generating SKC Address\n");
-					addrtype = 63;
-					privtype = 226;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PTS")== 0) {
-				fprintf(stderr,
-					"Generating PTS Address\n");
-					addrtype = 56;
-					privtype = 184;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NLG")== 0) {
-				fprintf(stderr,
-					"Generating NLG Address\n");
-					addrtype = 38;
-					privtype = 166;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MMC")== 0) {
-				fprintf(stderr,
-					"Generating MMC Address\n");
-					addrtype = 50;
-					privtype = 178;
-					break;
-			}
-			else
-			if (strcmp(optarg, "LEAF")== 0) {
-				fprintf(stderr,
-					"Generating LEAF Address\n");
-					addrtype = 95;
-					privtype = 223;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ROI")== 0) {
-			    fprintf(stderr,
-					"Generating ROI Address\n");
-					addrtype = 60;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "HODL")== 0) {
-				fprintf(stderr,
-					"Generating HODL Address\n");
-					addrtype = 40;
-					privtype = 168;
-					break;
-			}
-			else
-			if (strcmp(optarg, "FLOZ")== 0) {
-				fprintf(stderr,
-					"Generating FLOZ Address\n");
-					addrtype = 35;
-					privtype = 163;
-					break;
-			}
-			else
-			if (strcmp(optarg, "FAIR")== 0) {
-				fprintf(stderr,
-					"Generating FAIR Address\n");
-					addrtype = 95;
-					privtype = 223;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CON")== 0) {
-				fprintf(stderr,
-					"Generating CON Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "AUR")== 0) {
-				fprintf(stderr,
-					"Generating AUR Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GRC")== 0) {
-				fprintf(stderr,
-					"Generating GRC Address\n");
-					addrtype = 62;
-					privtype = 190;
-					break;
-			}
-			else
-			if (strcmp(optarg, "RIC")== 0) {
-				fprintf(stderr,
-					"Generating RIC Address\n");
-					addrtype = 60;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "UNO")== 0) {
-				fprintf(stderr,
-					"Generating UNO Address\n");
-					addrtype = 130;
-					privtype = 224;
-					break;
-			}
-			else
-			if (strcmp(optarg, "UIS")== 0) {
-				fprintf(stderr,
-					"Generating UIS Address\n");
-					addrtype = 68;
-					privtype = 132;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MYRIAD")== 0) {
-				fprintf(stderr,
-					"Generating MYRIAD Address\n");
-					addrtype = 50;
-					privtype = 178;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BQC")== 0) {
-				fprintf(stderr,
-					"Generating BQC Address\n");
-					addrtype = 85;
-					privtype = 213;
-					break;
-			}
-			else
-			if (strcmp(optarg, "YAC")== 0) {
-				fprintf(stderr,
-					"Generating YAC Address\n");
-					addrtype = 77;
-					privtype = 205;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PTC")== 0) {
-				fprintf(stderr,
-					"Generating PTC Address\n");
-					addrtype = 47;
-					privtype = 175;
-					break;
-			}
-			else
-			if (strcmp(optarg, "RDD")== 0) {
-				fprintf(stderr,
-					"Generating RDD Address\n");
-					addrtype = 61;
-					privtype = 189;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NYAN")== 0) {
-				fprintf(stderr,
-					"Generating NYAN Address\n");
-					addrtype = 45;
-					privtype = 173;
-					break;
-			}
-			else
-			if (strcmp(optarg, "IXC")== 0) {
-				fprintf(stderr,
-					"Generating IXC Address\n");
-					addrtype = 138;
-					privtype = 266;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CNC")== 0) {
-				fprintf(stderr,
-					"Generating CNC Address\n");
-					addrtype = 28;
-					privtype = 156;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CNOTE")== 0) {
-				fprintf(stderr,
-					"Generating C-Note Address\n");
-					addrtype = 28;
-					privtype = 186;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ARS")== 0) {
-				fprintf(stderr,
-					"Generating ARS Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ANC")== 0) {
-				fprintf(stderr,
-					"Generating ANC Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "OMC")== 0) {
-				fprintf(stderr,
-					"Generating OMC Address\n");
-					addrtype = 115;
-					privtype = 243;
-					break;
-			}
-			else
-			if (strcmp(optarg, "POT")== 0) {
-				fprintf(stderr,
-					"Generating POT Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "EFL")== 0) {
-				fprintf(stderr,
-					"Generating EFL Address\n");
-					addrtype = 48;
-					privtype = 176;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DOGED")== 0) {
-				fprintf(stderr,
-					"Generating DOGED Address\n");
-					addrtype = 30;
-					privtype = 158;
-					break;
-			}
-			else
-			if (strcmp(optarg, "OK")== 0) {
-				fprintf(stderr,
-					"Generating OK Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "AIB")== 0) {
-				fprintf(stderr,
-					"Generating AIB Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "TPC")== 0) {
-				fprintf(stderr,
-					"Generating TPC Address\n");
-					addrtype = 65;
-					privtype = 193;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DOPE")== 0) {
-				fprintf(stderr,
-					"Generating DOPE Address\n");
-					addrtype = 8;
-					privtype = 136;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BTCD")== 0) {
-				fprintf(stderr,
-					"Generating BTCD Address\n");
-					addrtype = 60;
-					privtype = 188;
-					break;
-			}
-			else
-			if (strcmp(optarg, "AC")== 0) {
-				fprintf(stderr,
-					"Generating AC Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NVC")== 0) {
-				fprintf(stderr,
-					"Generating NVC Address\n");
-					addrtype = 8;
-					privtype = 136;
-					break;
-			}
-		        else
-			if (strcmp(optarg, "HBN")== 0) {
-				fprintf(stderr,
-					"Generating HBN Address\n");
-					addrtype = 34;
-					privtype = 162;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GCR")== 0) {
-				fprintf(stderr,
-					"Generating GCR Address\n");
-					addrtype = 38;
-					privtype = 154;
-					break;
-			}
-			else
-			if (strcmp(optarg, "START")== 0) {
-				fprintf(stderr,
-					"Generating START Address\n");
-					addrtype = 125;
-					privtype = 253;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PND")== 0) {
-				fprintf(stderr,
-					"Generating PND Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PKB")== 0) {
-				fprintf(stderr,
-					"Generating PKB Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "SDC")== 0) {
-				fprintf(stderr,
-					"Generating SDC Address\n");
-					addrtype = 63;
-					privtype = 191;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CDN")== 0) {
-				fprintf(stderr,
-					"Generating CDN Address\n");
-					addrtype = 28;
-					privtype = 156;
-					break;
-			}
-			else
-			if (strcmp(optarg, "VPN")== 0) {
-				fprintf(stderr,
-					"Generating VPN Address\n");
-					addrtype = 71;
-					privtype = 199;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ZOOM")== 0) {
-				fprintf(stderr,
-					"Generating ZOOM Address\n");
-					addrtype = 103;
-					privtype = 231;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MUE")== 0) {
-				fprintf(stderr,
-					"Generating MUE Address\n");
-					addrtype = 15;
-					privtype = 143;
-					break;
-			}
-			else
-			if (strcmp(optarg, "VTC")== 0) {
-				fprintf(stderr,
-					"Generating VTC Address\n");
-					addrtype = 71;
-					privtype = 199;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ZRC")== 0) {
-				fprintf(stderr,
-					"Generating ZRC Address\n");
-					addrtype = 80;
-					privtype = 208;
-					break;
-			}
-			else
-			if (strcmp(optarg, "JBS")== 0) {
-				fprintf(stderr,
-					"Generating JBS Address\n");
-					addrtype = 43;
-					privtype = 171;
-					break;
-			}
-			else
-			if (strcmp(optarg, "JIN")== 0) {
-				fprintf(stderr,
-					"Generating JIN Address\n");
-					addrtype = 43;
-					privtype = 171;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NEOS")== 0) {
-				fprintf(stderr,
-					"Generating NEOS Address\n");
-					addrtype = 63;
-					privtype = 239;
-					break;
-			}
-			else
-			if (strcmp(optarg, "XPM")== 0) {
-				fprintf(stderr,
-					"Generating XPM Address\n");
-					addrtype = 23;
-					privtype = 151;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CLAM")== 0) {
-				fprintf(stderr,
-					"Generating CLAM Address\n");
-					addrtype = 137;
-					privtype = 133;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MONA")== 0) {
-				fprintf(stderr,
-					"Generating MONA Address\n");
-					addrtype = 50;
-					privtype = 176;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DGB")== 0) {
-				fprintf(stderr,
-					"Generating DGB Address\n");
-					addrtype = 30;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CCN")== 0) {
-				fprintf(stderr,
-					"Generating CCN Address\n");
-					addrtype = 28;
-					privtype = 156;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DGC")== 0) {
-				fprintf(stderr,
-					"Generating DGC Address\n");
-					addrtype = 30;
-					privtype = 158;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GRS")== 0) {
-				fprintf(stderr,
-					"Generating GRS Address\n");
-					GRSFlag = 1;
-					addrtype = 36;
-					privtype = 128;
-					scriptaddrtype = 5;
-					break;
-			}
-			else
-			if (strcmp(optarg, "RBY")== 0) {
-				fprintf(stderr,
-					"Generating RBY Address\n");
-					addrtype = 61;
-					privtype = 189;
-					break;
-			}
-			else
-			if (strcmp(optarg, "VIA")== 0) {
-				fprintf(stderr,
-					"Generating VIA Address\n");
-					addrtype = 71;
-					privtype = 199;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MZC")== 0) {
-				fprintf(stderr,
-					"Generating MZC Address\n");
-					addrtype = 50;
-					privtype = 224;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BLAST")== 0) {
-				fprintf(stderr,
-					"Generating BLAST Address\n");
-					addrtype = 25;
-					privtype = 239;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BLK")== 0) {
-				fprintf(stderr,
-					"Generating BLK Address\n");
-					addrtype = 25;
-					privtype = 153;
-					break;
-			}
-			else
-			if (strcmp(optarg, "FTC")== 0) {
-				fprintf(stderr,
-					"Generating FTC Address\n");
-					addrtype = 14;
-					privtype = 142;
-					break;
-			}
-			else
-			if (strcmp(optarg, "PPC")== 0) {
-				fprintf(stderr,
-					"Generating PPC Address\n");
-					addrtype = 55;
-					privtype = 183;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DASH")== 0) {
-				fprintf(stderr,
-					"Generating DASH Address\n");
-					addrtype = 76;
-					privtype = 204;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MGD")== 0) {
-				fprintf(stderr,
-					"Generating MassGrid Address\n");
-					addrtype = 50;
-					privtype = 25;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MOG")== 0) {
-				fprintf(stderr,
-					"Generating Mogwai Address\n");
-					addrtype = 50;
-					privtype = 204;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BTC")== 0) {
-				fprintf(stderr,
-					"Generating BTC Address\n");
-					addrtype = 0;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "IC")== 0) {
-				fprintf(stderr,
-					"Generating IC Address\n");
-					addrtype = 103;
-					privtype = 138;
-					break;
-			}
-			else
-			if (strcmp(optarg, "TEST")== 0) {
-				fprintf(stderr,
-					"Generating BTC Testnet Address\n");
-					addrtype = 111;
-					privtype = 239;
-					break;
-			}
-			else
-			if (strcmp(optarg, "DOGE")== 0) {
-				fprintf(stderr,
-					"Generating DOGE Address\n");
-					addrtype = 30;
-					privtype = 158;
-					break;
-			}
-			else
-			if (strcmp(optarg, "LBRY")== 0) {
-				fprintf(stderr,
-					"Generating LBRY Address\n");
-					addrtype = 85;
-					privtype = 28;
-					break;
-			}
-			else
-			if (strcmp(optarg, "LMC")== 0) {
-				fprintf(stderr,
-					"Generating LomoCoin Address\n");
-					addrtype = 48;
-					privtype = 176;
-					break;
-			}
-			else
-			if (strcmp(optarg, "LTC")== 0) {
-				fprintf(stderr,
-					"Generating LTC Address\n");
-					addrtype = 48;
-					privtype = 176;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GRLC")== 0) {
-				fprintf(stderr,
-					"Generating GRLC Address\n");
-					addrtype = 38;
-					privtype = 176;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GRN")== 0) {
-				fprintf(stderr,
-					"Generating GRN Address\n");
-					addrtype = 38;
-					privtype = 166;
-					break;
-			}
-			else
-			if (strcmp(optarg, "BWK")== 0) {
-				fprintf(stderr,
-					"Generating BWK Address\n");
-					addrtype = 85;
-					privtype = 212;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NMC")== 0) {
-				fprintf(stderr,
-					"Generating NMC Address\n");
-					addrtype = 52;
-					privtype = 180;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GAME")== 0) {
-				fprintf(stderr,
-					"Generating GAME Address\n");
-					addrtype = 38;
-					privtype = 166;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CRW")== 0) {
-				fprintf(stderr,
-					"Generating CRW Address\n");
-					addrtype = 0;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "QTUM")== 0) {
-				fprintf(stderr,
-					"Generating QTUM Address\n");
-					addrtype = 58;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ATMOS")== 0) {
-				fprintf(stderr,
-					"Generating ATMOS Address\n");
-					addrtype = 53;
-					privtype = 153;
-					break;
-			}
-			else
-			if (strcmp(optarg, "AXE")== 0) {
-				fprintf(stderr,
-					"Decrypting AXE Address\n");
-					addrtype = 55;
-					privtype = 204;
-					break;
-			}
-			else
-			if (strcmp(optarg, "ZNY")== 0) {
-				fprintf(stderr,
-					"Generating BitZeny Address\n");
-					addrtype = 81;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "NEET")== 0) {
-				fprintf(stderr,
-					"Generating NEETCOIN Address\n");
-					addrtype = 53;
-					privtype = 181;
-					break;
-			}
-			else
-			if (strcmp(optarg, "YTN")== 0) {
-				fprintf(stderr,
-					"Generating Yenten Address\n");
-					addrtype = 78;
-					privtype = 123;
-					break;
-			}
-			else
-			if (strcmp(optarg, "RVN")== 0) {
-				fprintf(stderr,
-					"Generating Ravencoin Address\n");
-					addrtype = 60;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "VIPS")== 0) {
-				fprintf(stderr,
-					"Generating VIPSTARCOIN Address\n");
-					addrtype = 70;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CIV")== 0) {
-				fprintf(stderr,
-					"Generating Civitas Address\n");
-					addrtype = 28;
-					privtype = 212;
-					break;
-			}
-			else
-			if (strcmp(optarg, "tCIV")== 0) {
-				fprintf(stderr,
-					"Generating Civitas Testnet Address\n");
-					addrtype = 139;
-					privtype = 239;
-					break;
-			}
-			else
-			if (strcmp(optarg, "GRV")== 0) {
-				fprintf(stderr,
-					"Generating Gravium Address\n");
-					addrtype = 38;
-					privtype = 166;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MNP")== 0) {
-				fprintf(stderr,
-					"Generating MNPCoin Address\n");
-					addrtype = 50;
-					privtype = 55;
-					break;
-			}
-			else
-			if (strcmp(optarg, "CARE")== 0) {
-				fprintf(stderr,
-					"Generating Carebit Address\n");
-					addrtype = 28;
-					privtype = 55;
-					break;
-			}
-			else
-			if (strcmp(optarg, "TUX")== 0) {
-				fprintf(stderr,
-					"Generating TUX Address\n");
-					addrtype = 65;
-					privtype = 193;
-					break;
-                        }
-                        else
-			if (strcmp(optarg, "KORE")== 0) {
-				fprintf(stderr,
-					"Generating Kore Address\n");
-					addrtype = 45;
-					privtype = 128;
-					break;
-			}
-			else
-			if (strcmp(optarg, "MNC")== 0) {
-				fprintf(stderr,
-					"Generating MNC Address\n");
-					addrtype = 50;
-					privtype = 178;
-					break;
-			}
-			else
-			if (strcmp(optarg, "tMNC")== 0) {
-				fprintf(stderr,
-					"Generating MNC Testnet Address\n");
-					addrtype = 111;
-					privtype = 239;
-					break;
-			}
+				}
+				else
+					if (strcmp(optarg, "AQX") == 0) {
+						fprintf(stderr,
+							"Generating Aquila Address\n");
+						addrtype = 75;
+						privtype = 212;
+						break;
+					}
+					else
+						if (strcmp(optarg, "IPS") == 0) {
+							fprintf(stderr,
+								"Generating Ipsum Address\n");
+							addrtype = 103;
+							privtype = 138;
+							break;
+						}
+						else
+							if (strcmp(optarg, "CCBC") == 0) {
+								fprintf(stderr,
+									"Generating CryptoCashBackCoin Address\n");
+								addrtype = 63;
+								privtype = 212;
+								break;
+							}
+							else
+								if (strcmp(optarg, "PIVX") == 0) {
+									fprintf(stderr,
+										"Generating PIVX Address\n");
+									addrtype = 30;
+									privtype = 212;
+									break;
+								}
+								else
+									if (strcmp(optarg, "KMD") == 0) {
+										fprintf(stderr,
+											"Generating KMD Address\n");
+										addrtype = 60;
+										privtype = 188;
+										break;
+									}
+									else
+										if (strcmp(optarg, "PINK") == 0) {
+											fprintf(stderr,
+												"Generating PINK Address\n");
+											addrtype = 3;
+											privtype = 131;
+											break;
+										}
+										else
+											if (strcmp(optarg, "DEEPONION") == 0) {
+												fprintf(stderr,
+													"Generating DEEPONION Address\n");
+												addrtype = 31;
+												privtype = 159;
+												break;
+											}
+											else
+												if (strcmp(optarg, "DNR") == 0) {
+													fprintf(stderr,
+														"Generating DNR Address\n");
+													addrtype = 30;
+													privtype = 158;
+													break;
+												}
+												else
+													if (strcmp(optarg, "DMD") == 0) {
+														fprintf(stderr,
+															"Generating DMD Address\n");
+														addrtype = 90;
+														privtype = 218;
+														break;
+													}
+													else
+														if (strcmp(optarg, "GUN") == 0) {
+															fprintf(stderr,
+																"Generating GUN Address\n");
+															addrtype = 39;
+															privtype = 167;
+															break;
+														}
+														else
+															if (strcmp(optarg, "HAM") == 0) {
+																fprintf(stderr,
+																	"Generating HAM Address\n");
+																addrtype = 0;
+																privtype = 128;
+																break;
+															}
+															else
+																if (strcmp(optarg, "DVC") == 0) {
+																	fprintf(stderr,
+																		"Generating DVC Address\n");
+																	addrtype = 0;
+																	privtype = 128;
+																	break;
+																}
+																else
+																	if (strcmp(optarg, "42") == 0) {
+																		fprintf(stderr,
+																			"Generating 42 Address\n");
+																		addrtype = 8;
+																		privtype = 136;
+																		break;
+																	}
+																	else
+																		if (strcmp(optarg, "WKC") == 0) {
+																			fprintf(stderr,
+																				"Generating WKC Address\n");
+																			addrtype = 0;
+																			privtype = 128;
+																			break;
+																		}
+																		else
+																			if (strcmp(optarg, "SPR") == 0) {
+																				fprintf(stderr,
+																					"Generating SPR Address\n");
+																				addrtype = 63;
+																				privtype = 191;
+																				break;
+																			}
+																			else
+																				if (strcmp(optarg, "SCA") == 0) {
+																					fprintf(stderr,
+																						"Generating SCA Address\n");
+																					addrtype = 63;
+																					privtype = 191;
+																					break;
+																				}
+																				else
+																					if (strcmp(optarg, "GAP") == 0) {
+																						fprintf(stderr,
+																							"Generating GAP Address\n");
+																						addrtype = 38;
+																						privtype = 166;
+																						break;
+																					}
+																					else
+																						if (strcmp(optarg, "CCC") == 0) {
+																							fprintf(stderr,
+																								"Generating CCC Address\n");
+																							addrtype = 15;
+																							privtype = 224;
+																							break;
+																						}
+																						else
+																							if (strcmp(optarg, "PIGGY") == 0) {
+																								fprintf(stderr,
+																									"Generating PIGGY Address\n");
+																								addrtype = 118;
+																								privtype = 246;
+																								break;
+																							}
+																							else
+																								if (strcmp(optarg, "WDC") == 0) {
+																									fprintf(stderr,
+																										"Generating WDC Address\n");
+																									addrtype = 73;
+																									privtype = 201;
+																									break;
+																								}
+																								else
+																									if (strcmp(optarg, "EMC") == 0) {
+																										fprintf(stderr,
+																											"Generating Emercoin Address\n");
+																										addrtype = 33;
+																										privtype = 128;
+																										break;
+																									}
+																									else
+																										if (strcmp(optarg, "EXCL") == 0) {
+																											fprintf(stderr,
+																												"Generating EXCL Address\n");
+																											addrtype = 33;
+																											privtype = 161;
+																											scriptaddrtype = -1;
+																											break;
+																										}
+																										else
+																											if (strcmp(optarg, "XC") == 0) {
+																												fprintf(stderr,
+																													"Generating XC Address\n");
+																												addrtype = 75;
+																												privtype = 203;
+																												break;
+																											}
+																											else
+																												if (strcmp(optarg, "WUBS") == 0) {
+																													fprintf(stderr,
+																														"Generating WUBS Address\n");
+																													addrtype = 29;
+																													privtype = 157;
+																													break;
+																												}
+																												else
+																													if (strcmp(optarg, "SXC") == 0) {
+																														fprintf(stderr,
+																															"Generating SXC Address\n");
+																														addrtype = 62;
+																														privtype = 190;
+																														break;
+																													}
+																													else
+																														if (strcmp(optarg, "SKC") == 0) {
+																															fprintf(stderr,
+																																"Generating SKC Address\n");
+																															addrtype = 63;
+																															privtype = 226;
+																															break;
+																														}
+																														else
+																															if (strcmp(optarg, "PTS") == 0) {
+																																fprintf(stderr,
+																																	"Generating PTS Address\n");
+																																addrtype = 56;
+																																privtype = 184;
+																																break;
+																															}
+																															else
+																																if (strcmp(optarg, "NLG") == 0) {
+																																	fprintf(stderr,
+																																		"Generating NLG Address\n");
+																																	addrtype = 38;
+																																	privtype = 166;
+																																	break;
+																																}
+																																else
+																																	if (strcmp(optarg, "MMC") == 0) {
+																																		fprintf(stderr,
+																																			"Generating MMC Address\n");
+																																		addrtype = 50;
+																																		privtype = 178;
+																																		break;
+																																	}
+																																	else
+																																		if (strcmp(optarg, "LEAF") == 0) {
+																																			fprintf(stderr,
+																																				"Generating LEAF Address\n");
+																																			addrtype = 95;
+																																			privtype = 223;
+																																			break;
+																																		}
+																																		else
+																																			if (strcmp(optarg, "ROI") == 0) {
+																																				fprintf(stderr,
+																																					"Generating ROI Address\n");
+																																				addrtype = 60;
+																																				privtype = 128;
+																																				break;
+																																			}
+																																			else
+																																				if (strcmp(optarg, "HODL") == 0) {
+																																					fprintf(stderr,
+																																						"Generating HODL Address\n");
+																																					addrtype = 40;
+																																					privtype = 168;
+																																					break;
+																																				}
+																																				else
+																																					if (strcmp(optarg, "FLOZ") == 0) {
+																																						fprintf(stderr,
+																																							"Generating FLOZ Address\n");
+																																						addrtype = 35;
+																																						privtype = 163;
+																																						break;
+																																					}
+																																					else
+																																						if (strcmp(optarg, "FAIR") == 0) {
+																																							fprintf(stderr,
+																																								"Generating FAIR Address\n");
+																																							addrtype = 95;
+																																							privtype = 223;
+																																							break;
+																																						}
+																																						else
+																																							if (strcmp(optarg, "CON") == 0) {
+																																								fprintf(stderr,
+																																									"Generating CON Address\n");
+																																								addrtype = 55;
+																																								privtype = 183;
+																																								break;
+																																							}
+																																							else
+																																								if (strcmp(optarg, "AUR") == 0) {
+																																									fprintf(stderr,
+																																										"Generating AUR Address\n");
+																																									addrtype = 23;
+																																									privtype = 151;
+																																									break;
+																																								}
+																																								else
+																																									if (strcmp(optarg, "GRC") == 0) {
+																																										fprintf(stderr,
+																																											"Generating GRC Address\n");
+																																										addrtype = 62;
+																																										privtype = 190;
+																																										break;
+																																									}
+																																									else
+																																										if (strcmp(optarg, "RIC") == 0) {
+																																											fprintf(stderr,
+																																												"Generating RIC Address\n");
+																																											addrtype = 60;
+																																											privtype = 128;
+																																											break;
+																																										}
+																																										else
+																																											if (strcmp(optarg, "UNO") == 0) {
+																																												fprintf(stderr,
+																																													"Generating UNO Address\n");
+																																												addrtype = 130;
+																																												privtype = 224;
+																																												break;
+																																											}
+																																											else
+																																												if (strcmp(optarg, "UIS") == 0) {
+																																													fprintf(stderr,
+																																														"Generating UIS Address\n");
+																																													addrtype = 68;
+																																													privtype = 132;
+																																													break;
+																																												}
+																																												else
+																																													if (strcmp(optarg, "MYRIAD") == 0) {
+																																														fprintf(stderr,
+																																															"Generating MYRIAD Address\n");
+																																														addrtype = 50;
+																																														privtype = 178;
+																																														break;
+																																													}
+																																													else
+																																														if (strcmp(optarg, "BQC") == 0) {
+																																															fprintf(stderr,
+																																																"Generating BQC Address\n");
+																																															addrtype = 85;
+																																															privtype = 213;
+																																															break;
+																																														}
+																																														else
+																																															if (strcmp(optarg, "YAC") == 0) {
+																																																fprintf(stderr,
+																																																	"Generating YAC Address\n");
+																																																addrtype = 77;
+																																																privtype = 205;
+																																																break;
+																																															}
+																																															else
+																																																if (strcmp(optarg, "PTC") == 0) {
+																																																	fprintf(stderr,
+																																																		"Generating PTC Address\n");
+																																																	addrtype = 47;
+																																																	privtype = 175;
+																																																	break;
+																																																}
+																																																else
+																																																	if (strcmp(optarg, "RDD") == 0) {
+																																																		fprintf(stderr,
+																																																			"Generating RDD Address\n");
+																																																		addrtype = 61;
+																																																		privtype = 189;
+																																																		break;
+																																																	}
+																																																	else
+																																																		if (strcmp(optarg, "NYAN") == 0) {
+																																																			fprintf(stderr,
+																																																				"Generating NYAN Address\n");
+																																																			addrtype = 45;
+																																																			privtype = 173;
+																																																			break;
+																																																		}
+																																																		else
+																																																			if (strcmp(optarg, "IXC") == 0) {
+																																																				fprintf(stderr,
+																																																					"Generating IXC Address\n");
+																																																				addrtype = 138;
+																																																				privtype = 266;
+																																																				break;
+																																																			}
+																																																			else
+																																																				if (strcmp(optarg, "CNC") == 0) {
+																																																					fprintf(stderr,
+																																																						"Generating CNC Address\n");
+																																																					addrtype = 28;
+																																																					privtype = 156;
+																																																					break;
+																																																				}
+																																																				else
+																																																					if (strcmp(optarg, "CNOTE") == 0) {
+																																																						fprintf(stderr,
+																																																							"Generating C-Note Address\n");
+																																																						addrtype = 28;
+																																																						privtype = 186;
+																																																						break;
+																																																					}
+																																																					else
+																																																						if (strcmp(optarg, "ARS") == 0) {
+																																																							fprintf(stderr,
+																																																								"Generating ARS Address\n");
+																																																							addrtype = 23;
+																																																							privtype = 151;
+																																																							break;
+																																																						}
+																																																						else
+																																																							if (strcmp(optarg, "ANC") == 0) {
+																																																								fprintf(stderr,
+																																																									"Generating ANC Address\n");
+																																																								addrtype = 23;
+																																																								privtype = 151;
+																																																								break;
+																																																							}
+																																																							else
+																																																								if (strcmp(optarg, "OMC") == 0) {
+																																																									fprintf(stderr,
+																																																										"Generating OMC Address\n");
+																																																									addrtype = 115;
+																																																									privtype = 243;
+																																																									break;
+																																																								}
+																																																								else
+																																																									if (strcmp(optarg, "POT") == 0) {
+																																																										fprintf(stderr,
+																																																											"Generating POT Address\n");
+																																																										addrtype = 55;
+																																																										privtype = 183;
+																																																										break;
+																																																									}
+																																																									else
+																																																										if (strcmp(optarg, "EFL") == 0) {
+																																																											fprintf(stderr,
+																																																												"Generating EFL Address\n");
+																																																											addrtype = 48;
+																																																											privtype = 176;
+																																																											break;
+																																																										}
+																																																										else
+																																																											if (strcmp(optarg, "DOGED") == 0) {
+																																																												fprintf(stderr,
+																																																													"Generating DOGED Address\n");
+																																																												addrtype = 30;
+																																																												privtype = 158;
+																																																												break;
+																																																											}
+																																																											else
+																																																												if (strcmp(optarg, "OK") == 0) {
+																																																													fprintf(stderr,
+																																																														"Generating OK Address\n");
+																																																													addrtype = 55;
+																																																													privtype = 183;
+																																																													break;
+																																																												}
+																																																												else
+																																																													if (strcmp(optarg, "AIB") == 0) {
+																																																														fprintf(stderr,
+																																																															"Generating AIB Address\n");
+																																																														addrtype = 23;
+																																																														privtype = 151;
+																																																														break;
+																																																													}
+																																																													else
+																																																														if (strcmp(optarg, "TPC") == 0) {
+																																																															fprintf(stderr,
+																																																																"Generating TPC Address\n");
+																																																															addrtype = 65;
+																																																															privtype = 193;
+																																																															break;
+																																																														}
+																																																														else
+																																																															if (strcmp(optarg, "DOPE") == 0) {
+																																																																fprintf(stderr,
+																																																																	"Generating DOPE Address\n");
+																																																																addrtype = 8;
+																																																																privtype = 136;
+																																																																break;
+																																																															}
+																																																															else
+																																																																if (strcmp(optarg, "BTCD") == 0) {
+																																																																	fprintf(stderr,
+																																																																		"Generating BTCD Address\n");
+																																																																	addrtype = 60;
+																																																																	privtype = 188;
+																																																																	break;
+																																																																}
+																																																																else
+																																																																	if (strcmp(optarg, "AC") == 0) {
+																																																																		fprintf(stderr,
+																																																																			"Generating AC Address\n");
+																																																																		addrtype = 23;
+																																																																		privtype = 151;
+																																																																		break;
+																																																																	}
+																																																																	else
+																																																																		if (strcmp(optarg, "NVC") == 0) {
+																																																																			fprintf(stderr,
+																																																																				"Generating NVC Address\n");
+																																																																			addrtype = 8;
+																																																																			privtype = 136;
+																																																																			break;
+																																																																		}
+																																																																		else
+																																																																			if (strcmp(optarg, "HBN") == 0) {
+																																																																				fprintf(stderr,
+																																																																					"Generating HBN Address\n");
+																																																																				addrtype = 34;
+																																																																				privtype = 162;
+																																																																				break;
+																																																																			}
+																																																																			else
+																																																																				if (strcmp(optarg, "GCR") == 0) {
+																																																																					fprintf(stderr,
+																																																																						"Generating GCR Address\n");
+																																																																					addrtype = 38;
+																																																																					privtype = 154;
+																																																																					break;
+																																																																				}
+																																																																				else
+																																																																					if (strcmp(optarg, "START") == 0) {
+																																																																						fprintf(stderr,
+																																																																							"Generating START Address\n");
+																																																																						addrtype = 125;
+																																																																						privtype = 253;
+																																																																						break;
+																																																																					}
+																																																																					else
+																																																																						if (strcmp(optarg, "PND") == 0) {
+																																																																							fprintf(stderr,
+																																																																								"Generating PND Address\n");
+																																																																							addrtype = 55;
+																																																																							privtype = 183;
+																																																																							break;
+																																																																						}
+																																																																						else
+																																																																							if (strcmp(optarg, "PKB") == 0) {
+																																																																								fprintf(stderr,
+																																																																									"Generating PKB Address\n");
+																																																																								addrtype = 55;
+																																																																								privtype = 183;
+																																																																								break;
+																																																																							}
+																																																																							else
+																																																																								if (strcmp(optarg, "SDC") == 0) {
+																																																																									fprintf(stderr,
+																																																																										"Generating SDC Address\n");
+																																																																									addrtype = 63;
+																																																																									privtype = 191;
+																																																																									break;
+																																																																								}
+																																																																								else
+																																																																									if (strcmp(optarg, "CDN") == 0) {
+																																																																										fprintf(stderr,
+																																																																											"Generating CDN Address\n");
+																																																																										addrtype = 28;
+																																																																										privtype = 156;
+																																																																										break;
+																																																																									}
+																																																																									else
+																																																																										if (strcmp(optarg, "VPN") == 0) {
+																																																																											fprintf(stderr,
+																																																																												"Generating VPN Address\n");
+																																																																											addrtype = 71;
+																																																																											privtype = 199;
+																																																																											break;
+																																																																										}
+																																																																										else
+																																																																											if (strcmp(optarg, "ZOOM") == 0) {
+																																																																												fprintf(stderr,
+																																																																													"Generating ZOOM Address\n");
+																																																																												addrtype = 103;
+																																																																												privtype = 231;
+																																																																												break;
+																																																																											}
+																																																																											else
+																																																																												if (strcmp(optarg, "MUE") == 0) {
+																																																																													fprintf(stderr,
+																																																																														"Generating MUE Address\n");
+																																																																													addrtype = 15;
+																																																																													privtype = 143;
+																																																																													break;
+																																																																												}
+																																																																												else
+																																																																													if (strcmp(optarg, "VTC") == 0) {
+																																																																														fprintf(stderr,
+																																																																															"Generating VTC Address\n");
+																																																																														addrtype = 71;
+																																																																														privtype = 199;
+																																																																														break;
+																																																																													}
+																																																																													else
+																																																																														if (strcmp(optarg, "ZRC") == 0) {
+																																																																															fprintf(stderr,
+																																																																																"Generating ZRC Address\n");
+																																																																															addrtype = 80;
+																																																																															privtype = 208;
+																																																																															break;
+																																																																														}
+																																																																														else
+																																																																															if (strcmp(optarg, "JBS") == 0) {
+																																																																																fprintf(stderr,
+																																																																																	"Generating JBS Address\n");
+																																																																																addrtype = 43;
+																																																																																privtype = 171;
+																																																																																break;
+																																																																															}
+																																																																															else
+																																																																																if (strcmp(optarg, "JIN") == 0) {
+																																																																																	fprintf(stderr,
+																																																																																		"Generating JIN Address\n");
+																																																																																	addrtype = 43;
+																																																																																	privtype = 171;
+																																																																																	break;
+																																																																																}
+																																																																																else
+																																																																																	if (strcmp(optarg, "NEOS") == 0) {
+																																																																																		fprintf(stderr,
+																																																																																			"Generating NEOS Address\n");
+																																																																																		addrtype = 63;
+																																																																																		privtype = 239;
+																																																																																		break;
+																																																																																	}
+																																																																																	else
+																																																																																		if (strcmp(optarg, "XPM") == 0) {
+																																																																																			fprintf(stderr,
+																																																																																				"Generating XPM Address\n");
+																																																																																			addrtype = 23;
+																																																																																			privtype = 151;
+																																																																																			break;
+																																																																																		}
+																																																																																		else
+																																																																																			if (strcmp(optarg, "CLAM") == 0) {
+																																																																																				fprintf(stderr,
+																																																																																					"Generating CLAM Address\n");
+																																																																																				addrtype = 137;
+																																																																																				privtype = 133;
+																																																																																				break;
+																																																																																			}
+																																																																																			else
+																																																																																				if (strcmp(optarg, "MONA") == 0) {
+																																																																																					fprintf(stderr,
+																																																																																						"Generating MONA Address\n");
+																																																																																					addrtype = 50;
+																																																																																					privtype = 176;
+																																																																																					break;
+																																																																																				}
+																																																																																				else
+																																																																																					if (strcmp(optarg, "DGB") == 0) {
+																																																																																						fprintf(stderr,
+																																																																																							"Generating DGB Address\n");
+																																																																																						addrtype = 30;
+																																																																																						privtype = 128;
+																																																																																						break;
+																																																																																					}
+																																																																																					else
+																																																																																						if (strcmp(optarg, "CCN") == 0) {
+																																																																																							fprintf(stderr,
+																																																																																								"Generating CCN Address\n");
+																																																																																							addrtype = 28;
+																																																																																							privtype = 156;
+																																																																																							break;
+																																																																																						}
+																																																																																						else
+																																																																																							if (strcmp(optarg, "DGC") == 0) {
+																																																																																								fprintf(stderr,
+																																																																																									"Generating DGC Address\n");
+																																																																																								addrtype = 30;
+																																																																																								privtype = 158;
+																																																																																								break;
+																																																																																							}
+																																																																																							else
+																																																																																								if (strcmp(optarg, "GRS") == 0) {
+																																																																																									fprintf(stderr,
+																																																																																										"Generating GRS Address\n");
+																																																																																									GRSFlag = 1;
+																																																																																									addrtype = 36;
+																																																																																									privtype = 128;
+																																																																																									scriptaddrtype = 5;
+																																																																																									break;
+																																																																																								}
+																																																																																								else
+																																																																																									if (strcmp(optarg, "RBY") == 0) {
+																																																																																										fprintf(stderr,
+																																																																																											"Generating RBY Address\n");
+																																																																																										addrtype = 61;
+																																																																																										privtype = 189;
+																																																																																										break;
+																																																																																									}
+																																																																																									else
+																																																																																										if (strcmp(optarg, "VIA") == 0) {
+																																																																																											fprintf(stderr,
+																																																																																												"Generating VIA Address\n");
+																																																																																											addrtype = 71;
+																																																																																											privtype = 199;
+																																																																																											break;
+																																																																																										}
+																																																																																										else
+																																																																																											if (strcmp(optarg, "MZC") == 0) {
+																																																																																												fprintf(stderr,
+																																																																																													"Generating MZC Address\n");
+																																																																																												addrtype = 50;
+																																																																																												privtype = 224;
+																																																																																												break;
+																																																																																											}
+																																																																																											else
+																																																																																												if (strcmp(optarg, "BLAST") == 0) {
+																																																																																													fprintf(stderr,
+																																																																																														"Generating BLAST Address\n");
+																																																																																													addrtype = 25;
+																																																																																													privtype = 239;
+																																																																																													break;
+																																																																																												}
+																																																																																												else
+																																																																																													if (strcmp(optarg, "BLK") == 0) {
+																																																																																														fprintf(stderr,
+																																																																																															"Generating BLK Address\n");
+																																																																																														addrtype = 25;
+																																																																																														privtype = 153;
+																																																																																														break;
+																																																																																													}
+																																																																																													else
+																																																																																														if (strcmp(optarg, "FTC") == 0) {
+																																																																																															fprintf(stderr,
+																																																																																																"Generating FTC Address\n");
+																																																																																															addrtype = 14;
+																																																																																															privtype = 142;
+																																																																																															break;
+																																																																																														}
+																																																																																														else
+																																																																																															if (strcmp(optarg, "PPC") == 0) {
+																																																																																																fprintf(stderr,
+																																																																																																	"Generating PPC Address\n");
+																																																																																																addrtype = 55;
+																																																																																																privtype = 183;
+																																																																																																break;
+																																																																																															}
+																																																																																															else
+																																																																																																if (strcmp(optarg, "DASH") == 0) {
+																																																																																																	fprintf(stderr,
+																																																																																																		"Generating DASH Address\n");
+																																																																																																	addrtype = 76;
+																																																																																																	privtype = 204;
+																																																																																																	break;
+																																																																																																}
+																																																																																																else
+																																																																																																	if (strcmp(optarg, "MGD") == 0) {
+																																																																																																		fprintf(stderr,
+																																																																																																			"Generating MassGrid Address\n");
+																																																																																																		addrtype = 50;
+																																																																																																		privtype = 25;
+																																																																																																		break;
+																																																																																																	}
+																																																																																																	else
+																																																																																																		if (strcmp(optarg, "MOG") == 0) {
+																																																																																																			fprintf(stderr,
+																																																																																																				"Generating Mogwai Address\n");
+																																																																																																			addrtype = 50;
+																																																																																																			privtype = 204;
+																																																																																																			break;
+																																																																																																		}
+																																																																																																		else
+																																																																																																			if (strcmp(optarg, "BTC") == 0) {
+																																																																																																				fprintf(stderr,
+																																																																																																					"Generating BTC Address\n");
+																																																																																																				addrtype = 0;
+																																																																																																				privtype = 128;
+																																																																																																				break;
+																																																																																																			}
+																																																																																																			else
+																																																																																																				if (strcmp(optarg, "IC") == 0) {
+																																																																																																					fprintf(stderr,
+																																																																																																						"Generating IC Address\n");
+																																																																																																					addrtype = 103;
+																																																																																																					privtype = 138;
+																																																																																																					break;
+																																																																																																				}
+																																																																																																				else
+																																																																																																					if (strcmp(optarg, "TEST") == 0) {
+																																																																																																						fprintf(stderr,
+																																																																																																							"Generating BTC Testnet Address\n");
+																																																																																																						addrtype = 111;
+																																																																																																						privtype = 239;
+																																																																																																						break;
+																																																																																																					}
+																																																																																																					else
+																																																																																																						if (strcmp(optarg, "DOGE") == 0) {
+																																																																																																							fprintf(stderr,
+																																																																																																								"Generating DOGE Address\n");
+																																																																																																							addrtype = 30;
+																																																																																																							privtype = 158;
+																																																																																																							break;
+																																																																																																						}
+																																																																																																						else
+																																																																																																							if (strcmp(optarg, "LBRY") == 0) {
+																																																																																																								fprintf(stderr,
+																																																																																																									"Generating LBRY Address\n");
+																																																																																																								addrtype = 85;
+																																																																																																								privtype = 28;
+																																																																																																								break;
+																																																																																																							}
+																																																																																																							else
+																																																																																																								if (strcmp(optarg, "LMC") == 0) {
+																																																																																																									fprintf(stderr,
+																																																																																																										"Generating LomoCoin Address\n");
+																																																																																																									addrtype = 48;
+																																																																																																									privtype = 176;
+																																																																																																									break;
+																																																																																																								}
+																																																																																																								else
+																																																																																																									if (strcmp(optarg, "LTC") == 0) {
+																																																																																																										fprintf(stderr,
+																																																																																																											"Generating LTC Address\n");
+																																																																																																										addrtype = 48;
+																																																																																																										privtype = 176;
+																																																																																																										break;
+																																																																																																									}
+																																																																																																									else
+																																																																																																										if (strcmp(optarg, "GRLC") == 0) {
+																																																																																																											fprintf(stderr,
+																																																																																																												"Generating GRLC Address\n");
+																																																																																																											addrtype = 38;
+																																																																																																											privtype = 176;
+																																																																																																											break;
+																																																																																																										}
+																																																																																																										else
+																																																																																																											if (strcmp(optarg, "GRN") == 0) {
+																																																																																																												fprintf(stderr,
+																																																																																																													"Generating GRN Address\n");
+																																																																																																												addrtype = 38;
+																																																																																																												privtype = 166;
+																																																																																																												break;
+																																																																																																											}
+																																																																																																											else
+																																																																																																												if (strcmp(optarg, "BWK") == 0) {
+																																																																																																													fprintf(stderr,
+																																																																																																														"Generating BWK Address\n");
+																																																																																																													addrtype = 85;
+																																																																																																													privtype = 212;
+																																																																																																													break;
+																																																																																																												}
+																																																																																																												else
+																																																																																																													if (strcmp(optarg, "NMC") == 0) {
+																																																																																																														fprintf(stderr,
+																																																																																																															"Generating NMC Address\n");
+																																																																																																														addrtype = 52;
+																																																																																																														privtype = 180;
+																																																																																																														break;
+																																																																																																													}
+																																																																																																													else
+																																																																																																														if (strcmp(optarg, "GAME") == 0) {
+																																																																																																															fprintf(stderr,
+																																																																																																																"Generating GAME Address\n");
+																																																																																																															addrtype = 38;
+																																																																																																															privtype = 166;
+																																																																																																															break;
+																																																																																																														}
+																																																																																																														else
+																																																																																																															if (strcmp(optarg, "CRW") == 0) {
+																																																																																																																fprintf(stderr,
+																																																																																																																	"Generating CRW Address\n");
+																																																																																																																addrtype = 0;
+																																																																																																																privtype = 128;
+																																																																																																																break;
+																																																																																																															}
+																																																																																																															else
+																																																																																																																if (strcmp(optarg, "QTUM") == 0) {
+																																																																																																																	fprintf(stderr,
+																																																																																																																		"Generating QTUM Address\n");
+																																																																																																																	addrtype = 58;
+																																																																																																																	privtype = 128;
+																																																																																																																	break;
+																																																																																																																}
+																																																																																																																else
+																																																																																																																	if (strcmp(optarg, "ATMOS") == 0) {
+																																																																																																																		fprintf(stderr,
+																																																																																																																			"Generating ATMOS Address\n");
+																																																																																																																		addrtype = 53;
+																																																																																																																		privtype = 153;
+																																																																																																																		break;
+																																																																																																																	}
+																																																																																																																	else
+																																																																																																																		if (strcmp(optarg, "AXE") == 0) {
+																																																																																																																			fprintf(stderr,
+																																																																																																																				"Decrypting AXE Address\n");
+																																																																																																																			addrtype = 55;
+																																																																																																																			privtype = 204;
+																																																																																																																			break;
+																																																																																																																		}
+																																																																																																																		else
+																																																																																																																			if (strcmp(optarg, "ZNY") == 0) {
+																																																																																																																				fprintf(stderr,
+																																																																																																																					"Generating BitZeny Address\n");
+																																																																																																																				addrtype = 81;
+																																																																																																																				privtype = 128;
+																																																																																																																				break;
+																																																																																																																			}
+																																																																																																																			else
+																																																																																																																				if (strcmp(optarg, "NEET") == 0) {
+																																																																																																																					fprintf(stderr,
+																																																																																																																						"Generating NEETCOIN Address\n");
+																																																																																																																					addrtype = 53;
+																																																																																																																					privtype = 181;
+																																																																																																																					break;
+																																																																																																																				}
+																																																																																																																				else
+																																																																																																																					if (strcmp(optarg, "YTN") == 0) {
+																																																																																																																						fprintf(stderr,
+																																																																																																																							"Generating Yenten Address\n");
+																																																																																																																						addrtype = 78;
+																																																																																																																						privtype = 123;
+																																																																																																																						break;
+																																																																																																																					}
+																																																																																																																					else
+																																																																																																																						if (strcmp(optarg, "RVN") == 0) {
+																																																																																																																							fprintf(stderr,
+																																																																																																																								"Generating Ravencoin Address\n");
+																																																																																																																							addrtype = 60;
+																																																																																																																							privtype = 128;
+																																																																																																																							break;
+																																																																																																																						}
+																																																																																																																						else
+																																																																																																																							if (strcmp(optarg, "VIPS") == 0) {
+																																																																																																																								fprintf(stderr,
+																																																																																																																									"Generating VIPSTARCOIN Address\n");
+																																																																																																																								addrtype = 70;
+																																																																																																																								privtype = 128;
+																																																																																																																								break;
+																																																																																																																							}
+																																																																																																																							else
+																																																																																																																								if (strcmp(optarg, "CIV") == 0) {
+																																																																																																																									fprintf(stderr,
+																																																																																																																										"Generating Civitas Address\n");
+																																																																																																																									addrtype = 28;
+																																																																																																																									privtype = 212;
+																																																																																																																									break;
+																																																																																																																								}
+																																																																																																																								else
+																																																																																																																									if (strcmp(optarg, "tCIV") == 0) {
+																																																																																																																										fprintf(stderr,
+																																																																																																																											"Generating Civitas Testnet Address\n");
+																																																																																																																										addrtype = 139;
+																																																																																																																										privtype = 239;
+																																																																																																																										break;
+																																																																																																																									}
+																																																																																																																									else
+																																																																																																																										if (strcmp(optarg, "GRV") == 0) {
+																																																																																																																											fprintf(stderr,
+																																																																																																																												"Generating Gravium Address\n");
+																																																																																																																											addrtype = 38;
+																																																																																																																											privtype = 166;
+																																																																																																																											break;
+																																																																																																																										}
+																																																																																																																										else
+																																																																																																																											if (strcmp(optarg, "MNP") == 0) {
+																																																																																																																												fprintf(stderr,
+																																																																																																																													"Generating MNPCoin Address\n");
+																																																																																																																												addrtype = 50;
+																																																																																																																												privtype = 55;
+																																																																																																																												break;
+																																																																																																																											}
+																																																																																																																											else
+																																																																																																																												if (strcmp(optarg, "CARE") == 0) {
+																																																																																																																													fprintf(stderr,
+																																																																																																																														"Generating Carebit Address\n");
+																																																																																																																													addrtype = 28;
+																																																																																																																													privtype = 55;
+																																																																																																																													break;
+																																																																																																																												}
+																																																																																																																												else
+																																																																																																																													if (strcmp(optarg, "TUX") == 0) {
+																																																																																																																														fprintf(stderr,
+																																																																																																																															"Generating TUX Address\n");
+																																																																																																																														addrtype = 65;
+																																																																																																																														privtype = 193;
+																																																																																																																														break;
+																																																																																																																													}
+																																																																																																																													else
+																																																																																																																														if (strcmp(optarg, "KORE") == 0) {
+																																																																																																																															fprintf(stderr,
+																																																																																																																																"Generating Kore Address\n");
+																																																																																																																															addrtype = 45;
+																																																																																																																															privtype = 128;
+																																																																																																																															break;
+																																																																																																																														}
+																																																																																																																														else
+																																																																																																																															if (strcmp(optarg, "MNC") == 0) {
+																																																																																																																																fprintf(stderr,
+																																																																																																																																	"Generating MNC Address\n");
+																																																																																																																																addrtype = 50;
+																																																																																																																																privtype = 178;
+																																																																																																																																break;
+																																																																																																																															}
+																																																																																																																															else
+																																																																																																																																if (strcmp(optarg, "tMNC") == 0) {
+																																																																																																																																	fprintf(stderr,
+																																																																																																																																		"Generating MNC Testnet Address\n");
+																																																																																																																																	addrtype = 111;
+																																																																																																																																	privtype = 239;
+																																																																																																																																	break;
+																																																																																																																																}
 			break;
 
-/*END ALTCOIN GENERATOR*/
+			/*END ALTCOIN GENERATOR*/
 
 		case 'X':
 			addrtype = atoi(optarg);
@@ -1600,19 +1602,19 @@ main(int argc, char **argv)
 		case 'Y':
 			/* Overrides privtype of 'X' but leaves all else intact */
 			privtype = atoi(optarg);
- 			break;
+			break;
 		case 'F':
 			if (!strcmp(optarg, "script"))
 				format = VCF_SCRIPT;
-                        else
-                        if (!strcmp(optarg, "compressed"))
-                                compressed = 1;
-                        else
-			if (strcmp(optarg, "pubkey")) {
-				fprintf(stderr,
-					"Invalid format '%s'\n", optarg);
-				return 1;
-			}
+			else
+				if (!strcmp(optarg, "compressed"))
+					compressed = 1;
+				else
+					if (strcmp(optarg, "pubkey")) {
+						fprintf(stderr,
+							"Invalid format '%s'\n", optarg);
+						return 1;
+					}
 			break;
 		case 'P': {
 			if (pubkey_base != NULL) {
@@ -1660,7 +1662,8 @@ main(int argc, char **argv)
 					return 1;
 				}
 				fp = stdin;
-			} else {
+			}
+			else {
 				fp = fopen(optarg, "r");
 				if (!fp) {
 					fprintf(stderr,
@@ -1691,10 +1694,10 @@ main(int argc, char **argv)
 			break;
 		case 'Z':
 			assert(strlen(optarg) % 2 == 0);
-			privkey_prefix_length = strlen(optarg)/2;
+			privkey_prefix_length = strlen(optarg) / 2;
 			for (size_t i = 0; i < privkey_prefix_length; i++) {
 				int value; // Can't sscanf directly to char array because of overlapping on Win32
-				sscanf(&optarg[i*2], "%2x", &value);
+				sscanf(&optarg[i * 2], "%2x", &value);
 				privkey_prefix[privkey_prefix_length - 1 - i] = value;
 			}
 			break;
@@ -1734,9 +1737,9 @@ main(int argc, char **argv)
 		opt = -1;
 #if !defined(_WIN32)
 		{	struct stat st;
-			if (!stat(seedfile, &st) &&
-			    (st.st_mode & (S_IFBLK|S_IFCHR))) {
-				opt = 32;
+		if (!stat(seedfile, &st) &&
+			(st.st_mode & (S_IFBLK | S_IFCHR))) {
+			opt = 32;
 		} }
 #endif
 		opt = RAND_load_file(seedfile, opt);
@@ -1753,9 +1756,10 @@ main(int argc, char **argv)
 	if (regex) {
 		vcp = vg_regex_context_new(addrtype, privtype);
 
-	} else {
+	}
+	else {
 		vcp = vg_prefix_context_new(addrtype, privtype,
-					    caseinsensitive);
+			caseinsensitive);
 	}
 
 	vcp->vc_compressed = compressed;
@@ -1783,9 +1787,9 @@ main(int argc, char **argv)
 		npatterns = argc - optind;
 
 		if (!vg_context_add_patterns(vcp,
-					     (const char ** const) patterns,
-					     npatterns))
-		return 1;
+			(const char ** const)patterns,
+			npatterns))
+			return 1;
 	}
 
 	for (i = 0; i < npattfp; i++) {
@@ -1801,9 +1805,9 @@ main(int argc, char **argv)
 			vg_prefix_context_set_case_insensitive(vcp, pattfpi[i]);
 
 		if (!vg_context_add_patterns(vcp,
-					     (const char ** const) patterns,
-					     npatterns))
-		return 1;
+			(const char ** const)patterns,
+			npatterns))
+			return 1;
 	}
 
 	if (!vcp->vc_npatterns) {
