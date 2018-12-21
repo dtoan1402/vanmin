@@ -66,14 +66,14 @@ vg_thread_loop(void *arg)
 	int i, c, len, output_interval;
 	int hash_len;
 
-	const BN_ULONG rekey_max = 1000000000000000000000;
+	const BN_ULONG rekey_max = 1000000000000;
 	BN_ULONG npoints, rekey_at, nbatch;
 
 	vg_context_t *vcp = (vg_context_t *)arg;
 	EC_KEY *pkey = NULL;
 	const EC_GROUP *pgroup;
 	const EC_POINT *pgen;
-	const int ptarraysize = 8192;
+	const int ptarraysize = 4096;
 	EC_POINT *ppnt[ptarraysize];
 	EC_POINT *pbatchinc;
 
