@@ -136,7 +136,7 @@ vg_thread_loop(void *arg)
 	}
 
 	while (!vcp->vc_halt) {
-		// if (++npoints >= rekey_at) {
+		 if (++npoints >= rekey_at) {
 			vg_exec_context_upgrade_lock(vxcp);
 			/* Generate a new random private key */
 			GenKey(pkey);
@@ -193,8 +193,8 @@ vg_thread_loop(void *arg)
 					pgen, vxcp->vxc_bnctx);
 			}
 
-		// }
-		//else {
+		 }
+		else {
 		//	/*
 		//	 * Common case
 		//	 *
@@ -213,7 +213,7 @@ vg_thread_loop(void *arg)
 		//			pbatchinc,
 		//			vxcp->vxc_bnctx);
 		//	}
-		//}
+		}
 
 		/*
 		 * The single most expensive operation performed in this
